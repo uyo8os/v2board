@@ -77,6 +77,7 @@ class UserController extends Controller
         $res = $userModel->forPage($current, $pageSize)
             ->get();
         $plan = Plan::get();
+        $userService = new \App\Services\UserService();
         for ($i = 0; $i < count($res); $i++) {
             for ($k = 0; $k < count($plan); $k++) {
                 if ($plan[$k]['id'] == $res[$i]['plan_id']) {
@@ -101,6 +102,7 @@ class UserController extends Controller
             $res[$i]['alive_ip'] = $countalive;
             $res[$i]['ips'] = implode(', ', $ips);
             $res[$i]['subscribe_url'] = Helper::getSubscribeUrl($res[$i]['token']);
+            $res[$i]['reset_day'] = $userService->getResetDay($res[$i]);
         }
         return response([
             'data' => $res,
