@@ -8,7 +8,9 @@ class PassportRoute
     public function map(Registrar $router)
     {
         $router->group([
-            'prefix' => 'passport'
+            'prefix' => 'passport',
+            // 开启 Session 以支持注册/邮箱验证码读取本地验证码
+            'middleware' => [\Illuminate\Session\Middleware\StartSession::class]
         ], function ($router) {
             // Auth
             $router->post('/auth/register', 'V1\\Passport\\AuthController@register');

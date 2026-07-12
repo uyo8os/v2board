@@ -18,8 +18,9 @@ class CommController extends Controller
                 'email_whitelist_suffix' => (int)config('v2board.email_whitelist_enable', 0)
                     ? $this->getEmailSuffix()
                     : 0,
+                // 开启本地验证码时前端仍沿用 is_recaptcha 开关，site_key 置空
                 'is_recaptcha' => (int)config('v2board.recaptcha_enable', 0) ? 1 : 0,
-                'recaptcha_site_key' => config('v2board.recaptcha_site_key'),
+                'recaptcha_site_key' => null,
                 'app_description' => config('v2board.app_description'),
                 'app_url' => config('v2board.app_url'),
                 'logo' => config('v2board.logo'),

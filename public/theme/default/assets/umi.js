@@ -18296,13 +18296,13 @@
             }
         }
         var x = "onloadcallback"
-          , O = "grecaptcha";
+          , O = "turnstile";
         function E() {
             return "undefined" !== typeof window && window.recaptchaOptions || {}
         }
         function _() {
             E();
-            return "https://www.recaptcha.net/recaptcha/api.js?onload=".concat(x, "&render=explicit")
+            return "https://challenges.cloudflare.com/turnstile/v0/api.js?onload=".concat(x, "&render=explicit")
         }
         var k = w(_, {
             callbackName: x,
@@ -18314,29 +18314,111 @@
             constructor(e) {
                 super(e),
                 this.state = {
-                    visible: !1
+                    visible: !1,
+                    captchaTs: Date.now(),
+                    captchaRetry: 0,
+                    captchaImageData: '',
+                    captchaKey: ''
+                },
+                this._inputRef = null
+            }
+            getApiUrl() {
+                // 优先检查 window.settings.host（umi主题配置）
+                if (window.settings && window.settings.host) {
+                    return window.settings.host;
                 }
+                // 兼容 EZv2 配置
+                if (window.EZ_CONFIG && window.EZ_CONFIG.API_MIDDLEWARE_ENABLED && window.EZ_CONFIG.API_MIDDLEWARE_URL) {
+                    return window.EZ_CONFIG.API_MIDDLEWARE_URL;
+                }
+                if (window.EZ_CONFIG && window.EZ_CONFIG.API_CONFIG && window.EZ_CONFIG.API_CONFIG.staticBaseUrl) {
+                    var baseUrl = Array.isArray(window.EZ_CONFIG.API_CONFIG.staticBaseUrl) 
+                        ? window.EZ_CONFIG.API_CONFIG.staticBaseUrl[0] 
+                        : window.EZ_CONFIG.API_CONFIG.staticBaseUrl;
+                    return baseUrl;
+                }
+                return '';
+            }
+            loadCaptchaImage(url) {
+                var self = this;
+                if (typeof fetch !== 'undefined') {
+                    fetch(url, {
+                        method: 'GET',
+                        credentials: 'include',
+                        headers: {
+                            'Accept': 'image/*'
+                        }
+                    }).then(function(response) {
+                        return response.blob();
+                    }).then(function(blob) {
+                        var reader = new FileReader();
+                        reader.onloadend = function() {
+                            self.setState({ captchaImageData: reader.result });
+                        };
+                        reader.readAsDataURL(blob);
+                    }).catch(function(error) {
+                        console.error('加载验证码失败:', error);
+                    });
+                }
+            }
+            onCaptchaError() {
+                // 图片加载失败时自动刷新一次，最多重试2次
+                this.setState(t=>{
+                    var n = (t.captchaRetry || 0) + 1;
+                    return { captchaRetry: n, captchaTs: Date.now() };
+                })
             }
             show() {
-                this.key = Math.random(),
-                this.props.visible ? this.setState({
-                    visible: !0
-                }) : "function" === typeof this.props.callback && this.props.callback()
+                this.key = Math.random();
+                if (this.props.visible) {
+                    var captchaKey = 'captcha_' + Date.now();
+                    this.setState({ visible: !0, captchaKey: captchaKey });
+                    var apiUrl = this.getApiUrl();
+                    if (apiUrl) {
+                        var captchaUrl = apiUrl + "/api/v1/guest/captcha?key=" + captchaKey;
+                        this.loadCaptchaImage(captchaUrl);
+                    }
+                } else {
+                    "function" === typeof this.props.callback && this.props.callback();
+                }
             }
             handle(e) {
-                setTimeout(()=>{
-                    this.hide(),
-                    "function" === typeof this.props.callback && this.props.callback(e)
-                }
-                , 500)
+                var self = this;
+                setTimeout(function() {
+                    self.hide();
+                    if ("function" === typeof self.props.callback) {
+                        var apiUrl = self.getApiUrl();
+                        if (apiUrl && self.state.captchaKey) {
+                            self.props.callback(e + '|||' + self.state.captchaKey);
+                        } else {
+                            self.props.callback(e);
+                        }
+                    }
+                }, 500)
             }
             hide() {
                 this.setState({
                     visible: !1
                 })
             }
+			refreshCaptcha() {
+                var newTs = Date.now();
+                var captchaKey = 'captcha_' + newTs;
+                this.setState({ captchaTs: newTs, captchaImageData: '', captchaKey: captchaKey });
+                var apiUrl = this.getApiUrl();
+                if (apiUrl) {
+                    var captchaUrl = apiUrl + "/api/v1/guest/captcha?key=" + captchaKey;
+                    this.loadCaptchaImage(captchaUrl);
+                }
+            }
             render() {
                 var e = this.props.guest.commConfig;
+				 var imgSrc;
+                if (this.state.captchaImageData) {
+                    imgSrc = this.state.captchaImageData;
+                } else {
+                    imgSrc = "/api/v1/guest/captcha?ts=" + this.state.captchaTs;
+                }
                 return i.a.createElement(i.a.Fragment, null, i.a.cloneElement(this.props.children, {
                     onClick: ()=>this.show()
                 }), i.a.createElement(r["a"], {
@@ -18345,11 +18427,37 @@
                     onCancel: ()=>this.hide(),
                     footer: !1,
                     closable: !1,
-                    centered: !0
-                }, i.a.createElement(S, {
-                    sitekey: e.recaptcha_site_key,
-                    onChange: e=>this.handle(e)
-                })))
+                    centered: !0,
+                    width: 360
+                }, i.a.createElement("div", { style: { display: "flex", justifyContent: "center" } },
+                    i.a.createElement("div", { style: { width: 320, display: "flex", flexDirection: "column", gap: 12 } },
+                        i.a.createElement("div", null,
+                            i.a.createElement("img", {
+                                alt: "captcha",
+                                style: { cursor: "pointer", borderRadius: 6, boxShadow: "0 1px 3px rgba(0,0,0,0.1)", width: "100%" },
+                                src: imgSrc,
+                                onClick: ()=>this.refreshCaptcha(),
+                                onError: ()=>this.onCaptchaError()
+                            })
+                        ),
+                        i.a.createElement("div", null,
+                            i.a.createElement("input", {
+                                type: "text",
+                                placeholder: "请输入验证码",
+                                className: "form-control form-control-alt",
+                                style: { width: "100%" },
+                                ref: e=>this._inputRef = e
+                            })
+                        ),
+                        i.a.createElement("div", null,
+                            i.a.createElement("button", {
+                                type: "button",
+                                className: "btn btn-primary btn-block",
+                                onClick: ()=>this.handle(this._inputRef ? this._inputRef.value : "")
+                            }, "确认")
+                        )
+                    )
+                )));
             }
         }
         t["a"] = Object(C["c"])(e=>{
@@ -31122,7 +31230,21 @@
                     className: "mb-3"
                 }, l.a.createElement("div", {
                     className: "v2board-shortcuts-item",
-                    onClick: ()=>h.a.push("/knowledge")
+                    onClick: ()=>h.a.push("/ticket")
+                }, l.a.createElement("div", null, Object(b["formatMessage"])({
+                    id: "\u9047\u5230\u95ee\u9898"
+                })), l.a.createElement("div", {
+                    className: "description"
+                }, Object(b["formatMessage"])({
+                    id: "\u9047\u5230\u95ee\u9898\u53ef\u4ee5\u901a\u8fc7\u5de5\u5355\u4e0e\u6211\u4eec\u6c9f\u901a"
+                })), l.a.createElement("i", {
+                    style: {
+                        float: "right"
+                    },
+                    className: "nav-main-link-icon si si-support"
+                })), l.a.createElement("div", {
+                    className: "v2board-shortcuts-item",
+                    onClick: ()=>h.a.push("/knowledge/ticket")
                 }, l.a.createElement("div", null, Object(b["formatMessage"])({
                     id: "\u67e5\u770b\u6559\u7a0b"
                 })), l.a.createElement("div", {
@@ -31163,20 +31285,6 @@
                         float: "right"
                     },
                     className: "nav-main-link-icon si si-".concat(Object(p["m"])(d) ? "clock" : "bag")
-                })), l.a.createElement("div", {
-                    className: "v2board-shortcuts-item",
-                    onClick: ()=>h.a.push("/ticket")
-                }, l.a.createElement("div", null, Object(b["formatMessage"])({
-                    id: "\u9047\u5230\u95ee\u9898"
-                })), l.a.createElement("div", {
-                    className: "description"
-                }, Object(b["formatMessage"])({
-                    id: "\u9047\u5230\u95ee\u9898\u53ef\u4ee5\u901a\u8fc7\u5de5\u5355\u4e0e\u6211\u4eec\u6c9f\u901a"
-                })), l.a.createElement("i", {
-                    style: {
-                        float: "right"
-                    },
-                    className: "nav-main-link-icon si si-support"
                 })))))))))), this.state.notice && l.a.createElement(c["a"], {
                     title: this.state.notice.title,
                     visible: this.state.visible,
@@ -57550,7 +57658,7 @@
                                         invite_code: a,
                                         email_code: c
                                     },
-                                    l && (p["recaptcha_data"] = l),
+                                    l && (l.indexOf('|||') > -1 ? (p["recaptcha_data"] = l.split('|||')[0], p["captcha_key"] = l.split('|||')[1]) : p["recaptcha_data"] = l),
                                     n.next = 8,
                                     Object(i["b"])("/passport/auth/register", p);
                                 case 8:
@@ -57598,7 +57706,7 @@
                                 case 4:
                                     return l = {},
                                     l["email"] = r,
-                                    a && (l["recaptcha_data"] = a),
+                                    a && (a.indexOf('|||') > -1 ? (l["recaptcha_data"] = a.split('|||')[0], l["captcha_key"] = a.split('|||')[1]) : l["recaptcha_data"] = a),
                                     l["isforget"] = e.isforget,
                                     n.next = 9,
                                     Object(i["b"])("/passport/comm/sendEmailVerify", l);
