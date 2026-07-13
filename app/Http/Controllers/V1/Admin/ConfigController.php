@@ -56,7 +56,13 @@ class ConfigController extends Controller
 
     public function setTelegramWebhook(Request $request)
     {
-        $hookUrl = secure_url('/api/v1/guest/telegram/webhook?access_token=' . md5(config('v2board.telegram_bot_token', $request->input('telegram_bot_token'))));
+        // 优先使用单独配置的 Telegram 通信域名，留空则回退到站点网址
+        $domain = config('v2board.telegram_webhook_domain');
+        if (empty($domain)) {
+            $domain = config('v2board.app_url');
+        }
+        $domain = rtrim((string)$domain, '/');
+        $hookUrl = $domain . '/api/v1/guest/telegram/webhook?access_token=' . md5(config('v2board.telegram_bot_token', $request->input('telegram_bot_token')));
         $telegramService = new TelegramService($request->input('telegram_bot_token'));
         $telegramService->getMe();
         $telegramService->setWebhook($hookUrl);
@@ -145,6 +151,7 @@ class ConfigController extends Controller
             'telegram' => [
                 'telegram_bot_enable' => config('v2board.telegram_bot_enable', 0),
                 'telegram_bot_token' => config('v2board.telegram_bot_token'),
+                'telegram_webhook_domain' => config('v2board.telegram_webhook_domain'),
                 'telegram_discuss_link' => config('v2board.telegram_discuss_link')
             ],
             'app' => [

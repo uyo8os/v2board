@@ -78,6 +78,7 @@ class ConfigSave extends FormRequest
         // telegram
         'telegram_bot_enable' => 'in:0,1',
         'telegram_bot_token' => '',
+        'telegram_webhook_domain' => 'nullable|url',
         'telegram_discuss_id' => '',
         'telegram_channel_id' => '',
         'telegram_discuss_link' => 'nullable|url',
