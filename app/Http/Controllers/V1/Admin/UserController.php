@@ -77,6 +77,24 @@ class UserController extends Controller
         $res = $userModel->forPage($current, $pageSize)
             ->get();
         $plan = Plan::get();
+        $serverModels = [
+            'vmess' => \App\Models\ServerVmess::class,
+            'vless' => \App\Models\ServerVless::class,
+            'trojan' => \App\Models\ServerTrojan::class,
+            'shadowsocks' => \App\Models\ServerShadowsocks::class,
+            'hysteria' => \App\Models\ServerHysteria::class,
+            'tuic' => \App\Models\ServerTuic::class,
+            'anytls' => \App\Models\ServerAnytls::class,
+            'v2node' => \App\Models\ServerV2node::class,
+        ];
+        $serverNames = [];
+        foreach ($serverModels as $type => $model) {
+            $servers = $model::select('id', 'name')->get();
+            foreach ($servers as $server) {
+                $serverNames[$type . $server->id] = $server->name;
+            }
+        }
+
         $userService = new \App\Services\UserService();
         for ($i = 0; $i < count($res); $i++) {
             for ($k = 0; $k < count($plan); $k++) {
@@ -94,7 +112,8 @@ class UserController extends Controller
                     if (!is_int($data) && isset($data['aliveips'])) {
                         foreach($data['aliveips'] as $ip_NodeId) {
                             $ip = explode("_", $ip_NodeId)[0];
-                            $ips[] = $ip . '_' . $nodetypeid;
+                            $serverName = isset($serverNames[$nodetypeid]) ? $serverNames[$nodetypeid] : '';
+                            $ips[] = $ip . '_' . $nodetypeid . ($serverName ? '_' . $serverName : '');
                         }
                     }
                 }
