@@ -4,6 +4,7 @@ namespace App\Http\Controllers\V1\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Log as LogModel;
+use App\Models\MailLog;
 use App\Utils\CacheKey;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -114,6 +115,36 @@ class SystemController extends Controller
         return response([
             'data' => $res,
             'total' => $total
+        ]);
+    }
+
+    public function getMailLog(Request $request) {
+        $current = $request->input('current') ? $request->input('current') : 1;
+        $pageSize = $request->input('page_size') >= 10 ? $request->input('page_size') : 10;
+        $builder = MailLog::orderBy('created_at', 'DESC');
+        if ($email = $request->input('email')) {
+            $builder->where('email', 'like', "%{$email}%");
+        }
+        $total = $builder->count();
+        $res = $builder->forPage($current, $pageSize)
+            ->get();
+        return response([
+            'data' => $res,
+            'total' => $total
+        ]);
+    }
+
+    public function clearSystemLog() {
+        LogModel::truncate();
+        return response([
+            'data' => true
+        ]);
+    }
+
+    public function clearMailLog() {
+        MailLog::truncate();
+        return response([
+            'data' => true
         ]);
     }
 }

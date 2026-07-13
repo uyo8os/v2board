@@ -167,6 +167,9 @@ class AdminRoute
             $router->get ('/system/getQueueWorkload', 'V1\\Admin\\SystemController@getQueueWorkload');
             $router->get ('/system/getQueueMasters', '\\Laravel\\Horizon\\Http\\Controllers\\MasterSupervisorController@index');
             $router->get ('/system/getSystemLog', 'V1\\Admin\\SystemController@getSystemLog');
+            $router->get ('/system/getMailLog', 'V1\\Admin\\SystemController@getMailLog');
+            $router->post('/system/clearSystemLog', 'V1\\Admin\\SystemController@clearSystemLog');
+            $router->post('/system/clearMailLog', 'V1\\Admin\\SystemController@clearMailLog');
             // Theme
             $router->get ('/theme/getThemes', 'V1\\Admin\\ThemeController@getThemes');
             $router->post('/theme/saveThemeConfig', 'V1\\Admin\\ThemeController@saveThemeConfig');
