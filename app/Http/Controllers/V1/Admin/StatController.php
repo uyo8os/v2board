@@ -58,6 +58,15 @@ class StatController extends Controller
                     ->where('created_at', '<', time())
                     ->whereNotIn('status', [0, 2])
                     ->sum('total_amount'),
+                // 本月新增用户的消费收入：本月注册用户产生的有效订单总额
+                'month_new_user_income' => Order::whereIn('user_id', function ($query) {
+                        $query->select('id')
+                            ->from('v2_user')
+                            ->where('created_at', '>=', strtotime(date('Y-m-1')))
+                            ->where('created_at', '<', time());
+                    })
+                    ->whereNotIn('status', [0, 2])
+                    ->sum('total_amount'),
                 'month_register_total' => User::where('created_at', '>=', strtotime(date('Y-m-1')))
                     ->where('created_at', '<', time())
                     ->count(),
