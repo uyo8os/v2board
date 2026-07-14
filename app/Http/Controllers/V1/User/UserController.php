@@ -439,6 +439,15 @@ class UserController extends Controller
             abort(500, __('Transfer failed'));
         }
 
+        try {
+            $orderService->sendPaymentNotification($order);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('佣金划转通知发送失败: ' . $e->getMessage(), [
+                'trade_no' => $order->trade_no,
+                'user_id' => $user->id
+            ]);
+        }
+
         DB::commit();
 
         return response([

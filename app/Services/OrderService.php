@@ -285,7 +285,7 @@ class OrderService
     /**
      * 发送成功收款的 Telegram 通知（覆盖所有支付路径）
      */
-    private function sendPaymentNotification($order)
+    public function sendPaymentNotification($order)
     {
         $user = User::find($order->user_id);
         $plan = Plan::find($order->plan_id);
@@ -311,7 +311,20 @@ class OrderService
         ];
         $periodName = $periodMap[$order->period] ?? $order->period;
 
-        // 支付渠道：网关支付显示具体渠道，余额/0元/后台手动单独标注
+        $typeMap = [
+            1 => '新购',
+            2 => '续费',
+            3 => '变更',
+            4 => '流量包',
+            9 => '充值'
+        ];
+        $typeName = $typeMap[$order->type] ?? '未知类型';
+        $isCommissionTransfer = ($order->type === 9 && (int)$order->total_amount === 0);
+        if ($isCommissionTransfer) {
+            $typeName = '佣金划转';
+        }
+
+        // 支付渠道
         $channelMap = [
             'AlipayF2F' => '支付宝面对面',
             'WechatPayNative' => '微信支付',
@@ -327,9 +340,13 @@ class OrderService
             'BEasyPaymentUSDT' => 'BEpusdt',
             'MGate' => 'MGate'
         ];
+
         if ($payment) {
             $paymentName = $payment->name;
             $paymentChannel = $channelMap[$payment->payment] ?? $payment->payment;
+        } elseif ($isCommissionTransfer) {
+            $paymentName = '佣金划转';
+            $paymentChannel = '佣金划转';
         } elseif ($order->callback_no === 'manual_operation') {
             $paymentName = '后台手动';
             $paymentChannel = '后台手动';
@@ -343,35 +360,108 @@ class OrderService
 
         $registerDate = $user ? date('Y-m-d H:i:s', $user->created_at) : '未知';
         $sourceUrl = $_SERVER['HTTP_REFERER'] ?? $_SERVER['HTTP_HOST'] ?? config('v2board.app_url', config('app.url', '未知'));
+        $displayAmount = $isCommissionTransfer ? $order->surplus_amount : $order->total_amount;
+        $title = $isCommissionTransfer ? "佣金划转成功" : "成功收款";
 
-        $message = sprintf(
-            "💰 成功收款%s元\n" .
-            "———————————————\n" .
-            "🌐 支付接口: `%s`\n" .
-            "🏦 支付渠道: `%s`\n" .
-            "📧 用户邮箱: `%s`\n" .
-            "📦 购买套餐: `%s`\n" .
-            "📅 套餐周期: `%s`\n" .
-            "🎫 优  惠  券: `%s`\n" .
-            "👥 邀  请  人: `%s`\n" .
-            "🆔 订  单  号: `%s`\n" .
-            "🌐 来源网址: `%s`\n" .
-            "📅 注册日期: `%s`\n" .
-            "———————————————\n" .
-            "💵 今日总收入: %s元",
-            number_format($order->total_amount / 100, 2),
-            $this->tgSafe($paymentName),
-            $this->tgSafe($paymentChannel),
-            $this->tgSafe($user ? $user->email : '未知'),
-            $this->tgSafe($plan ? $plan->name : '未知套餐'),
-            $this->tgSafe($periodName),
-            $this->tgSafe($coupon ? $coupon->name : '无'),
-            $this->tgSafe($inviter ? $inviter->email : '无'),
-            $this->tgSafe($order->trade_no),
-            $this->tgSafe($sourceUrl),
-            $this->tgSafe($registerDate),
-            number_format($todayIncome / 100, 2)
-        );
+        if ($isCommissionTransfer) {
+            // 3.2 折抵金额类型模板 (佣金划转)
+            $message = sprintf(
+                "💰 %s: `%s`元\n" .
+                "———————————————\n" .
+                "🛒 订单类型: `%s`\n" .
+                "📧 用户邮箱: `%s`\n" .
+                "👥 邀请人: `%s`\n" .
+                "🆔 订单号: `%s`\n" .
+                "🌐 来源网址: `%s`\n" .
+                "📅 注册日期: `%s`\n" .
+                "———————————————\n" .
+                "💵 今日总收入: %s元",
+                $title,
+                number_format($displayAmount / 100, 2),
+                $this->tgSafe($typeName),
+                $this->tgSafe($user ? $user->email : '未知'),
+                $this->tgSafe($inviter ? $inviter->email : '无'),
+                $this->tgSafe($order->trade_no),
+                $this->tgSafe($sourceUrl),
+                $this->tgSafe($registerDate),
+                number_format($todayIncome / 100, 2)
+            );
+        } elseif ($order->type === 9) {
+            // 3.1 充值类型模板
+            $message = sprintf(
+                "💰 %s: `%s`元\n" .
+                "———————————————\n" .
+                "🛒 订单类型: `%s`\n" .
+                "📧 用户邮箱: `%s`\n" .
+                "📅 套餐周期: `%s`\n" .
+                "👥 邀请人: `%s`\n" .
+                "🆔 订单号: `%s`\n" .
+                "🌐 来源网址: `%s`\n" .
+                "📅 注册日期: `%s`\n" .
+                "———————————————\n" .
+                "💵 今日总收入: %s元",
+                $title,
+                number_format($displayAmount / 100, 2),
+                $this->tgSafe($typeName),
+                $this->tgSafe($user ? $user->email : '未知'),
+                $this->tgSafe($periodName),
+                $this->tgSafe($inviter ? $inviter->email : '无'),
+                $this->tgSafe($order->trade_no),
+                $this->tgSafe($sourceUrl),
+                $this->tgSafe($registerDate),
+                number_format($todayIncome / 100, 2)
+            );
+        } else {
+            // 普通订单模板 (含动态字段)
+            $dynamicFields = "";
+            if ($order->balance_amount > 0) {
+                $dynamicFields .= sprintf("💵 余额支付: `%s`元\n", number_format($order->balance_amount / 100, 2));
+            }
+            if ($order->discount_amount > 0) {
+                $dynamicFields .= sprintf("🧧 优惠金额: `%s`元\n", number_format($order->discount_amount / 100, 2));
+            }
+            if ($order->refund_amount > 0) {
+                $dynamicFields .= sprintf("↩️ 退回金额: `%s`元\n", number_format($order->refund_amount / 100, 2));
+            }
+            if ($order->surplus_amount > 0) {
+                $dynamicFields .= sprintf("💰 折抵金额: `%s`元\n", number_format($order->surplus_amount / 100, 2));
+            }
+            if ($coupon) {
+                $dynamicFields .= sprintf("🎫 优  惠  券: `%s`\n", $this->tgSafe($coupon->name));
+            }
+
+            $message = sprintf(
+                "💰 %s: `%s`元\n" .
+                "———————————————\n" .
+                "🛒 订单类型: `%s`\n" .
+                "🌐 支付接口: `%s`\n" .
+                "🏦 支付渠道: `%s`\n" .
+                "📧 用户邮箱: `%s`\n" .
+                "📦 购买套餐: `%s`\n" .
+                "📅 套餐周期: `%s`\n" .
+                "%s" .
+                "👥 邀  请  人: `%s`\n" .
+                "🆔 订  单  号: `%s`\n" .
+                "🌐 来源网址: `%s`\n" .
+                "📅 注册日期: `%s`\n" .
+                "———————————————\n" .
+                "💵 今日总收入: %s元",
+                $title,
+                number_format($displayAmount / 100, 2),
+                $this->tgSafe($typeName),
+                $this->tgSafe($paymentName),
+                $this->tgSafe($paymentChannel),
+                $this->tgSafe($user ? $user->email : '未知'),
+                $this->tgSafe($plan ? $plan->name : '未知套餐'),
+                $this->tgSafe($periodName),
+                $dynamicFields,
+                $this->tgSafe($inviter ? $inviter->email : '无'),
+                $this->tgSafe($order->trade_no),
+                $this->tgSafe($sourceUrl),
+                $this->tgSafe($registerDate),
+                number_format($todayIncome / 100, 2)
+            );
+        }
 
         $telegramService = new TelegramService();
         $telegramService->sendMessageWithAdmin($message);
