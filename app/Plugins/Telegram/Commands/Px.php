@@ -31,21 +31,23 @@ class Px extends Telegram {
         // 今日排行 (Top 10)
         $todayRank = $this->getRank($todayStart, time(), 10);
         
-        // 昨日排行 (Top 5)
-        $yesterdayRank = $this->getRank($yesterdayStart, $yesterdayEnd, 5);
+        // 昨日排行 (Top 10)
+        $yesterdayRank = $this->getRank($yesterdayStart, $yesterdayEnd, 10);
 
-        $text = "🚀 流量排行\n"
+        $text = "📊 流量排行\n"
             . "———————————————\n"
             . "🔥 今日用户流量排行：\n";
         
+        $medals = ['🥇', '🥈', '🥉', '🎖', '🎖', '🎖', '🎖', '🎖', '🎖', '🎖'];
+
         if (empty($todayRank)) {
             $text .= "暂无数据\n";
         } else {
             foreach ($todayRank as $index => $item) {
-                $rank = $index + 1;
+                $medal = $medals[$index] ?? '🎖';
                 $email = $this->tgSafe($item['email']);
-                $traffic = Helper::trafficConvert($item['total']);
-                $text .= "{$rank}. `{$email}` ({$traffic})\n";
+                $traffic = str_pad(Helper::trafficConvert($item['total']), 9, ' ', STR_PAD_LEFT);
+                $text .= "{$medal}|{$traffic} | {$email}\n";
             }
         }
 
@@ -55,10 +57,10 @@ class Px extends Telegram {
             $text .= "暂无数据\n";
         } else {
             foreach ($yesterdayRank as $index => $item) {
-                $rank = $index + 1;
+                $medal = $medals[$index] ?? '🎖';
                 $email = $this->tgSafe($item['email']);
-                $traffic = Helper::trafficConvert($item['total']);
-                $text .= "{$rank}. `{$email}` ({$traffic})\n";
+                $traffic = str_pad(Helper::trafficConvert($item['total']), 9, ' ', STR_PAD_LEFT);
+                $text .= "{$medal}|{$traffic} | {$email}\n";
             }
         }
 
@@ -68,7 +70,7 @@ class Px extends Telegram {
     private function getRank($startAt, $endAt, $limit) {
         $statistics = StatUser::select([
             'user_id',
-            DB::raw('SUM((u + d) * server_rate) as total')
+            DB::raw('SUM(CASE WHEN server_rate >= 1 THEN (u + d) * server_rate WHEN server_rate >= 0.1 THEN (u + d) ELSE (u + d) * server_rate END) as total')
         ])
             ->where('record_at', '>=', $startAt)
             ->where('record_at', '<', $endAt)
