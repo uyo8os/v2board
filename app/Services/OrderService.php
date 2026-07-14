@@ -3,10 +3,13 @@
 namespace App\Services;
 
 use App\Jobs\OrderHandleJob;
+use App\Models\Coupon;
 use App\Models\Order;
+use App\Models\Payment;
 use App\Models\Plan;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class OrderService
 {
@@ -267,7 +270,119 @@ class OrderService
         } catch (\Exception $e) {
             return false;
         }
+        // 所有支付路径（网关回调 / 余额或0元 / 后台手动）都在此统一发送成功收款通知
+        // 通知失败不影响支付结果
+        try {
+            $this->sendPaymentNotification($order);
+        } catch (\Throwable $e) {
+            Log::error('支付成功通知发送失败: ' . $e->getMessage(), [
+                'trade_no' => $order->trade_no
+            ]);
+        }
         return true;
+    }
+
+    /**
+     * 发送成功收款的 Telegram 通知（覆盖所有支付路径）
+     */
+    private function sendPaymentNotification($order)
+    {
+        $user = User::find($order->user_id);
+        $plan = Plan::find($order->plan_id);
+        $coupon = $order->coupon_id ? Coupon::find($order->coupon_id) : null;
+        $payment = $order->payment_id ? Payment::find($order->payment_id) : null;
+        $inviter = $user && $user->invite_user_id ? User::find($user->invite_user_id) : null;
+
+        $todayIncome = Order::where('created_at', '>=', strtotime(date('Y-m-d')))
+            ->where('created_at', '<', time())
+            ->whereNotIn('status', [0, 2])
+            ->sum('total_amount');
+
+        $periodMap = [
+            'month_price' => '月付',
+            'quarter_price' => '季付',
+            'half_year_price' => '半年付',
+            'year_price' => '年付',
+            'two_year_price' => '两年付',
+            'three_year_price' => '三年付',
+            'onetime_price' => '一次性',
+            'reset_price' => '重置包',
+            'deposit' => '余额充值'
+        ];
+        $periodName = $periodMap[$order->period] ?? $order->period;
+
+        // 支付渠道：网关支付显示具体渠道，余额/0元/后台手动单独标注
+        $channelMap = [
+            'AlipayF2F' => '支付宝面对面',
+            'WechatPayNative' => '微信支付',
+            'EPay' => 'EPay',
+            'StripeAlipay' => '支付宝(Stripe)',
+            'StripeWepay' => '微信(Stripe)',
+            'StripeCredit' => '信用卡(Stripe)',
+            'StripeCheckout' => 'Stripe',
+            'StripeALL' => 'Stripe全能',
+            'BTCPay' => 'BTCPay',
+            'Coinbase' => 'Coinbase',
+            'CoinPayments' => 'CoinPayments',
+            'BEasyPaymentUSDT' => 'BEpusdt',
+            'MGate' => 'MGate'
+        ];
+        if ($payment) {
+            $paymentName = $payment->name;
+            $paymentChannel = $channelMap[$payment->payment] ?? $payment->payment;
+        } elseif ($order->callback_no === 'manual_operation') {
+            $paymentName = '后台手动';
+            $paymentChannel = '后台手动';
+        } elseif ($order->balance_amount > 0) {
+            $paymentName = '余额支付';
+            $paymentChannel = '余额支付';
+        } else {
+            $paymentName = '免费/0元';
+            $paymentChannel = '免费/0元';
+        }
+
+        $registerDate = $user ? date('Y-m-d H:i:s', $user->created_at) : '未知';
+        $sourceUrl = $_SERVER['HTTP_REFERER'] ?? $_SERVER['HTTP_HOST'] ?? config('v2board.app_url', config('app.url', '未知'));
+
+        $message = sprintf(
+            "💰 成功收款%s元\n" .
+            "———————————————\n" .
+            "🌐 支付接口: `%s`\n" .
+            "🏦 支付渠道: `%s`\n" .
+            "📧 用户邮箱: `%s`\n" .
+            "📦 购买套餐: `%s`\n" .
+            "📅 套餐周期: `%s`\n" .
+            "🎫 优  惠  券: `%s`\n" .
+            "👥 邀  请  人: `%s`\n" .
+            "🆔 订  单  号: `%s`\n" .
+            "🌐 来源网址: `%s`\n" .
+            "📅 注册日期: `%s`\n" .
+            "———————————————\n" .
+            "💵 今日总收入: %s元",
+            number_format($order->total_amount / 100, 2),
+            $this->tgSafe($paymentName),
+            $this->tgSafe($paymentChannel),
+            $this->tgSafe($user ? $user->email : '未知'),
+            $this->tgSafe($plan ? $plan->name : '未知套餐'),
+            $this->tgSafe($periodName),
+            $this->tgSafe($coupon ? $coupon->name : '无'),
+            $this->tgSafe($inviter ? $inviter->email : '无'),
+            $this->tgSafe($order->trade_no),
+            $this->tgSafe($sourceUrl),
+            $this->tgSafe($registerDate),
+            number_format($todayIncome / 100, 2)
+        );
+
+        $telegramService = new TelegramService();
+        $telegramService->sendMessageWithAdmin($message);
+    }
+
+    /**
+     * 清理动态值，避免破坏 Telegram Markdown code span
+     */
+    private function tgSafe($value)
+    {
+        return str_replace(['`', "\n", "\r"], ['', ' ', ''], (string)$value);
     }
 
     public function cancel():bool

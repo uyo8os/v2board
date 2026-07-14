@@ -5,6 +5,7 @@ namespace App\Http\Controllers\V1\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Log as LogModel;
 use App\Models\MailLog;
+use App\Models\FailedJob;
 use App\Utils\CacheKey;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -143,6 +144,26 @@ class SystemController extends Controller
 
     public function clearMailLog() {
         MailLog::truncate();
+        return response([
+            'data' => true
+        ]);
+    }
+
+    public function getQueueLog(Request $request) {
+        $current = $request->input('current') ? $request->input('current') : 1;
+        $pageSize = $request->input('page_size') >= 10 ? $request->input('page_size') : 10;
+        $builder = FailedJob::orderBy('failed_at', 'DESC');
+        $total = $builder->count();
+        $res = $builder->forPage($current, $pageSize)
+            ->get();
+        return response([
+            'data' => $res,
+            'total' => $total
+        ]);
+    }
+
+    public function clearQueueLog() {
+        FailedJob::truncate();
         return response([
             'data' => true
         ]);
