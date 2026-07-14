@@ -14,6 +14,7 @@ class CommController extends Controller
         return response([
             'data' => [
                 'is_telegram' => (int)config('v2board.telegram_bot_enable', 0),
+                'telegram_show_bind' => (int)config('v2board.telegram_show_bind', 1),
                 'telegram_discuss_link' => config('v2board.telegram_discuss_link'),
                 'stripe_pk' => config('v2board.stripe_pk_live'),
                 'withdraw_methods' => config('v2board.commission_withdraw_method', Dict::WITHDRAW_METHOD_WHITELIST_DEFAULT),
