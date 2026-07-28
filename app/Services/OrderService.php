@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\Payment;
 use App\Models\Plan;
 use App\Models\User;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -359,7 +360,9 @@ class OrderService
         }
 
         $registerDate = $user ? date('Y-m-d H:i:s', $user->created_at) : '未知';
-        $sourceUrl = $_SERVER['HTTP_REFERER'] ?? $_SERVER['HTTP_HOST'] ?? config('v2board.app_url', config('app.url', '未知'));
+        // 优先使用下单时记录的前端来源地址（支付网关回调拿不到 Referer），其次才回退到当前请求
+        $sourceUrl = Cache::get('ORDER_SOURCE_URL_' . $order->trade_no)
+            ?: ($_SERVER['HTTP_REFERER'] ?? $_SERVER['HTTP_HOST'] ?? config('v2board.app_url', config('app.url', '未知')));
         $displayAmount = $isCommissionTransfer ? $order->surplus_amount : $order->total_amount;
         $title = $isCommissionTransfer ? "佣金划转成功" : "成功收款";
 

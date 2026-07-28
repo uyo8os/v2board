@@ -15,6 +15,7 @@ use App\Services\PlanService;
 use App\Services\UserService;
 use App\Utils\Helper;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class OrderController extends Controller
@@ -246,6 +247,9 @@ class OrderController extends Controller
                 }
             }
         }
+
+        // 记录下单来源的前端地址，供支付网关回调时的通知使用（回调是服务器到服务器，拿不到 Referer）
+        Cache::put('ORDER_SOURCE_URL_' . $tradeNo, $host, 86400);
 
         $result = $paymentService->pay([
             'trade_no' => $tradeNo,
