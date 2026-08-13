@@ -21030,6 +21030,13 @@
                             className: "nav-main-link-icon si si-shuffle"
                         })
                     }, {
+                        title: "\u52a8\u6001\u9650\u901f",
+                        type: "item",
+                        href: "/server/speedlimit",
+                        icon: o.a.createElement("i", {
+                            className: "nav-main-link-icon si si-speedometer"
+                        })
+                    }, {
                         title: "\u8d22\u52a1",
                         type: "heading"
                     }, {
@@ -32040,9 +32047,10 @@
                                 send_email_mass: "\u90ae\u4ef6\u7fa4\u53d1\u961f\u5217",
                                 send_telegram: "Telegram\u6d88\u606f\u961f\u5217",
                                 stat: "\u7edf\u8ba1\u961f\u5217",
-                                traffic_fetch: "\u6d41\u91cf\u6d88\u8d39\u961f\u5217"
+                                traffic_fetch: "\u6d41\u91cf\u6d88\u8d39\u961f\u5217",
+                                speed_limit: "\u52a8\u6001\u9650\u901f\u961f\u5217"
                             };
-                            return t[e]
+                            return t[e] || e
                         }
                     }, {
                         title: "\u4f5c\u4e1a\u91cf",
@@ -45504,6 +45512,12 @@
                     dataIndex: "server_rate",
                     key: "server_rate",
                     align: "right"
+                }, {
+                    title: "\u5408\u8ba1",
+                    dataIndex: "total",
+                    key: "total",
+                    align: "right",
+                    render: (e, t) => Object(p["b"])((t.u + t.d) * t.server_rate)
                 }];
                 return u.a.createElement(u.a.Fragment, null, u.a.cloneElement(this.props.children, {
                     onClick: ()=>this.show()
@@ -82614,6 +82628,670 @@
             path: "/server/route",
             exact: !0,
             component: n("wtkT").default
+        }, {
+            path: "/server/speedlimit",
+            exact: !0,
+            component: function() {
+                var Rr = n("q1tI");
+                var React = (Rr && Rr.createElement) ? Rr : (Rr.default || Rr);
+                var h = React.createElement;
+                function apiBase() {
+                    return (window.settings && window.settings.host) ? window.settings.host : window.location.origin;
+                }
+                function securePath() {
+                    return (window.settings.secure_path || "").replace("/", "");
+                }
+                function authHeaders() {
+                    return { "authorization": window.localStorage.getItem("authorization") };
+                }
+                function formatBytes(v) {
+                    v = parseInt(v) || 0;
+                    var kb = 1024, mb = 1048576, gb = 1073741824;
+                    if (v > gb) return (v / gb).toFixed(2) + " GB";
+                    if (v > mb) return (v / mb).toFixed(2) + " MB";
+                    if (v > kb) return (v / kb).toFixed(2) + " KB";
+                    return v + " B";
+                }
+                function formatDuration(sec) {
+                    sec = parseInt(sec) || 0;
+                    if (sec % 86400 === 0) return (sec / 86400) + " \u5929";
+                    if (sec % 3600 === 0) return (sec / 3600) + " \u5c0f\u65f6";
+                    if (sec % 60 === 0) return (sec / 60) + " \u5206\u949f";
+                    return sec + " \u79d2";
+                }
+                return class SpeedLimitPage extends React.Component {
+                    constructor(e) {
+                        super(e);
+                        this.state = {
+                            rules: [],
+                            nodes: [],
+                            loading: false,
+                            saveLoading: false,
+                            visible: false,
+                            editing: null,
+                            current: 1,
+                            pageSize: 10
+                        };
+                    }
+                    componentDidMount() {
+                        this.load();
+                        this.loadNodes();
+                    }
+                    load() {
+                        var self = this;
+                        self.setState({ loading: true });
+                        fetch(apiBase() + "/api/v1/" + securePath() + "/server/speedlimit/fetch", { method: "GET", headers: authHeaders(), credentials: "include" })
+                            .then(function(r) { return r.json(); })
+                            .then(function(res) {
+                                var rules = (res && res.data) || [];
+                                var totalPages = Math.max(1, Math.ceil(rules.length / self.state.pageSize));
+                                var current = self.state.current > totalPages ? totalPages : self.state.current;
+                                self.setState({ rules: rules, current: current, loading: false });
+                            }).catch(function() { self.setState({ loading: false }); });
+                    }
+                    changePage(p) {
+                        var totalPages = Math.max(1, Math.ceil(this.state.rules.length / this.state.pageSize));
+                        if (p < 1 || p > totalPages) return;
+                        this.setState({ current: p });
+                    }
+                    loadNodes() {
+                        var self = this;
+                        fetch(apiBase() + "/api/v1/" + securePath() + "/server/manage/getNodes", { method: "GET", headers: authHeaders(), credentials: "include" })
+                            .then(function(r) { return r.json(); })
+                            .then(function(res) {
+                                self.setState({ nodes: (res && res.data) || [] });
+                            }).catch(function() {});
+                    }
+                    openModal(rule) {
+                        this.setState({
+                            visible: true,
+                            editing: rule ? Object.assign({}, rule) : { name: "", node_ids: [], trigger_period: 7200, threshold: 0, speed_limit: 0, limit_duration: 3600, disconnect_existing_connections: 0 }
+                        });
+                    }
+                    closeModal() {
+                        this.setState({ visible: false, editing: null });
+                    }
+                    save() {
+                        var self = this;
+                        var editing = this.state.editing;
+                        if (!editing.name) { window.alert("\u8bf7\u8f93\u5165\u89c4\u5219\u540d\u79f0"); return; }
+                        if (!editing.node_ids || editing.node_ids.length === 0) { window.alert("\u8bf7\u9009\u62e9\u81f3\u5c11\u4e00\u4e2a\u8981\u9650\u901f\u7684\u8282\u70b9"); return; }
+                        self.setState({ saveLoading: true });
+                        fetch(apiBase() + "/api/v1/" + securePath() + "/server/speedlimit/save", {
+                            method: "POST",
+                            headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
+                            credentials: "include",
+                            body: JSON.stringify(editing)
+                        }).then(function(r) {
+                            self.setState({ saveLoading: false });
+                            if (r.ok) {
+                                self.closeModal();
+                                self.load();
+                            } else {
+                                r.json().then(function(res) { window.alert((res && res.message) || "保存失败"); }).catch(function() { window.alert("保存失败"); });
+                            }
+                        }).catch(function() { self.setState({ saveLoading: false }); });
+                    }
+                    drop(rule) {
+                        var self = this;
+                        if (!window.confirm("\u786e\u5b9a\u8981\u5220\u9664\u89c4\u5219\u300c" + rule.name + "\u300d\u5417\uff1f\u5220\u9664\u540e\u5f53\u524d\u6b63\u5728\u9650\u901f\u4e2d\u7684\u7528\u6237\u4f1a\u88ab\u81ea\u52a8\u89e3\u9664\uff0c\u5386\u53f2\u8bb0\u5f55\u4e5f\u4f1a\u4e00\u5e76\u6e05\u9664\u3002")) return;
+                        fetch(apiBase() + "/api/v1/" + securePath() + "/server/speedlimit/drop", {
+                            method: "POST",
+                            headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
+                            credentials: "include",
+                            body: JSON.stringify({ id: rule.id })
+                        }).then(function(r) { return r.json(); }).then(function() { self.load(); });
+                    }
+                    toggle(rule) {
+                        var self = this;
+                        fetch(apiBase() + "/api/v1/" + securePath() + "/server/speedlimit/toggle", {
+                            method: "POST",
+                            headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
+                            credentials: "include",
+                            body: JSON.stringify({ id: rule.id })
+                        }).then(function(r) { return r.json(); }).then(function() { self.load(); });
+                    }
+                    manage(rule) {
+                        window.g_history && window.g_history.push("/server/speedlimit/manage?rule_id=" + rule.id + "&name=" + encodeURIComponent(rule.name));
+                    }
+                    history(rule) {
+                        window.g_history && window.g_history.push("/server/speedlimit/history?rule_id=" + rule.id + "&name=" + encodeURIComponent(rule.name));
+                    }
+                    toggleNode(node, checked) {
+                        var editing = Object.assign({}, this.state.editing);
+                        var nodeIds = (editing.node_ids || []).slice();
+                        var key = node.type + "-" + node.id;
+                        if (checked) {
+                            if (!nodeIds.some(function(n) { return (n.type + "-" + n.id) === key; })) {
+                                nodeIds.push({ type: node.type, id: node.id });
+                            }
+                        } else {
+                            nodeIds = nodeIds.filter(function(n) { return (n.type + "-" + n.id) !== key; });
+                        }
+                        editing.node_ids = nodeIds;
+                        this.setState({ editing: editing });
+                    }
+                    isNodeChecked(node) {
+                        var nodeIds = (this.state.editing && this.state.editing.node_ids) || [];
+                        var key = node.type + "-" + node.id;
+                        return nodeIds.some(function(n) { return (n.type + "-" + n.id) === key; });
+                    }
+                    setField(field, value) {
+                        this.setState({ editing: Object.assign({}, this.state.editing, { [field]: value }) });
+                    }
+                    render() {
+                        var self = this;
+                        var s = this.state;
+                        var editing = s.editing || {};
+                        var totalPages = Math.max(1, Math.ceil(s.rules.length / s.pageSize));
+                        var pagedRules = s.rules.slice((s.current - 1) * s.pageSize, s.current * s.pageSize);
+                        var rows = pagedRules.map(function(rule) {
+                            var nodeCount = Array.isArray(rule.node_ids) ? rule.node_ids.length : 0;
+                            return h("tr", { key: rule.id },
+                                h("td", null, rule.id),
+                                h("td", null, rule.name),
+                                h("td", null, formatDuration(rule.trigger_period)),
+                                h("td", null, nodeCount + " \u4e2a\u8282\u70b9"),
+                                h("td", null, formatBytes(rule.threshold)),
+                                h("td", null, rule.speed_limit + " Mbps"),
+                                h("td", null, formatDuration(rule.limit_duration)),
+                                h("td", null, rule.disconnect_existing_connections ? h("span", { className: "badge badge-warning" }, "\u6253\u65ad\u8fde\u63a5") : h("span", { className: "text-muted" }, "\u4ec5\u9650\u901f")),
+                                h("td", null,
+                                    h("label", { className: "form-check form-check-inline", style: { margin: 0 } },
+                                        h("input", {
+                                            type: "checkbox",
+                                            checked: !!rule.enable,
+                                            onChange: function() { self.toggle(rule); },
+                                            style: { position: "static", marginRight: "4px" }
+                                        }),
+                                        rule.enable ? "\u5df2\u542f\u7528" : "\u5df2\u5173\u95ed"
+                                    )
+                                ),
+                                h("td", { style: { whiteSpace: "nowrap" } },
+                                    h("a", { href: "javascript:void(0);", onClick: function() { self.openModal(rule); } }, "\u7f16\u8f91"),
+                                    h("span", { style: { margin: "0 6px", color: "#ddd" } }, "|"),
+                                    h("a", { href: "javascript:void(0);", onClick: function() { self.manage(rule); } }, "\u7ba1\u7406"),
+                                    h("span", { style: { margin: "0 6px", color: "#ddd" } }, "|"),
+                                    h("a", { href: "javascript:void(0);", onClick: function() { self.history(rule); } }, "\u8bb0\u5f55"),
+                                    h("span", { style: { margin: "0 6px", color: "#ddd" } }, "|"),
+                                    h("a", { href: "javascript:void(0);", onClick: function() { self.drop(rule); } }, "\u5220\u9664")
+                                )
+                            );
+                        });
+                        var Layout = n("Bl7J").a;
+                        return h(Layout, Object.assign({}, this.props, { title: "\u52a8\u6001\u9650\u901f" }),
+                            h("div", { className: "block block-rounded" },
+                                h("div", { className: "block-header block-header-default" },
+                                    h("h3", { className: "block-title" }, "\u52a8\u6001\u9650\u901f\u89c4\u5219"),
+                                    h("div", { className: "block-options" },
+                                        h("button", { type: "button", className: "btn btn-sm btn-alt-secondary", style: { marginRight: "8px" }, onClick: function() { self.load(); } }, "\u5237\u65b0"),
+                                        h("button", { type: "button", className: "btn btn-sm btn-primary", onClick: function() { self.openModal(null); } }, "+ \u6dfb\u52a0\u89c4\u5219")
+                                    )
+                                ),
+                                h("div", { className: "block-content" },
+                                    h("div", { className: "table-responsive" },
+                                        h("table", { className: "table table-striped table-vcenter" },
+                                            h("thead", null,
+                                                h("tr", null,
+                                                    h("th", { style: { width: "60px" } }, "ID"),
+                                                    h("th", null, "\u89c4\u5219\u540d\u79f0"),
+                                                    h("th", null, "\u89e6\u53d1\u65f6\u95f4"),
+                                                    h("th", null, "\u9650\u901f\u8282\u70b9"),
+                                                    h("th", null, "\u89e6\u53d1\u6d41\u91cf"),
+                                                    h("th", null, "\u9650\u901f\u503c"),
+                                                    h("th", null, "\u9650\u901f\u65f6\u957f"),
+                                                    h("th", { style: { width: "90px" } }, "\u65ad\u8fde\u6a21\u5f0f"),
+                                                    h("th", { style: { width: "110px" } }, "\u72b6\u6001"),
+                                                    h("th", { style: { width: "200px" } }, "\u64cd\u4f5c")
+                                                )
+                                            ),
+                                            h("tbody", null, s.loading ? h("tr", null, h("td", { colSpan: 10, style: { textAlign: "center" } }, "\u52a0\u8f7d\u4e2d...")) : (rows.length ? rows : h("tr", null, h("td", { colSpan: 10, style: { textAlign: "center" } }, "\u6682\u65e0\u89c4\u5219"))))
+                                        )
+                                    ),
+                                    h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "12px" } },
+                                        h("span", { className: "text-muted" }, "\u5171 " + s.rules.length + " \u6761"),
+                                        h("div", { style: { display: "flex", alignItems: "center" } },
+                                            h("button", { type: "button", className: "btn btn-sm btn-alt-secondary", disabled: s.current <= 1, onClick: function() { self.changePage(s.current - 1); } }, "\u4e0a\u4e00\u9875"),
+                                            h("select", { className: "form-control form-control-sm", style: { display: "inline-block", width: "auto", margin: "0 8px" }, value: s.current, onChange: function(ev) { self.changePage(parseInt(ev.target.value, 10)); } }, (function() { var opts = []; for (var p = 1; p <= totalPages; p++) { opts.push(h("option", { key: p, value: p }, "\u7b2c " + p + " \u9875")); } return opts; })()),
+                                            h("span", { className: "text-muted", style: { marginRight: "8px" } }, "/ " + totalPages),
+                                            h("button", { type: "button", className: "btn btn-sm btn-alt-secondary", disabled: s.current >= totalPages, onClick: function() { self.changePage(s.current + 1); } }, "\u4e0b\u4e00\u9875")
+                                        )
+                                    )
+                                )
+                            ),
+                            s.visible ? h("div", { className: "modal show", style: { display: "block", background: "rgba(0,0,0,.5)", overflowY: "auto" }, tabIndex: -1 },
+                                h("div", { className: "modal-dialog", style: { maxWidth: "560px", margin: "30px auto" } },
+                                    h("div", { className: "modal-content", style: { maxHeight: "calc(100vh - 60px)", display: "flex", flexDirection: "column" } },
+                                        h("div", { className: "modal-header", style: { flexShrink: 0 } },
+                                            h("h5", { className: "modal-title" }, editing.id ? "\u7f16\u8f91\u89c4\u5219" : "\u6dfb\u52a0\u89c4\u5219"),
+                                            h("button", { type: "button", className: "close", onClick: function() { self.closeModal(); } }, h("span", null, "\u00d7"))
+                                        ),
+                                        h("div", { className: "modal-body", style: { overflowY: "auto" } },
+                                            h("div", { className: "form-group" },
+                                                h("label", null, "\u89c4\u5219\u540d\u79f0"),
+                                                h("input", { type: "text", className: "form-control", placeholder: "\u8bf7\u8f93\u5165\u89c4\u5219\u540d\u79f0", value: editing.name || "", onChange: function(ev) { self.setField("name", ev.target.value); } })
+                                            ),
+                                            h("div", { className: "form-group" },
+                                                h("label", null, "\u89e6\u53d1\u65f6\u95f4\uff08\u79d2\uff0c\u4f8b\u5982 7200 = 2\u5c0f\u65f6\uff09"),
+                                                h("small", { className: "form-text text-muted", style: { marginTop: 0, marginBottom: "4px" } }, "\u4ece\u8be5\u7528\u6237\u5728\u672c\u89c4\u5219\u4e0b\u9996\u6b21\u4ea7\u751f\u6d41\u91cf\u5f00\u59cb\u8ba1\u65f6\uff0c\u5728\u6b64\u65f6\u95f4\u5185\u6d41\u91cf\u8d85\u51fa\u5219\u89e6\u53d1\u9650\u901f\uff0c\u8fc7\u671f\u672a\u89e6\u53d1\u5219\u91cd\u65b0\u8ba1\u65f6"),
+                                                h("input", { type: "number", className: "form-control", min: 60, placeholder: "\u8bf7\u8f93\u5165\u89e6\u53d1\u65f6\u95f4\u79d2\u6570", value: editing.trigger_period || "", onChange: function(ev) { self.setField("trigger_period", parseInt(ev.target.value) || 0); } })
+                                            ),
+                                            h("div", { className: "form-group" },
+                                                h("label", null, "\u9009\u62e9\u8981\u9650\u901f\u7684\u8282\u70b9"),
+                                                h("div", { style: { maxHeight: "220px", overflowY: "auto", border: "1px solid #e2e8f2", borderRadius: "4px", padding: "8px" } },
+                                                    (s.nodes || []).map(function(node) {
+                                                        return h("label", { key: node.type + "-" + node.id, className: "form-check", style: { position: "relative", display: "block", marginBottom: "4px" } },
+                                                            h("input", { type: "checkbox", checked: self.isNodeChecked(node), onChange: function(ev) { self.toggleNode(node, ev.target.checked); }, style: { position: "static", marginRight: "6px" } }),
+                                                            "[" + node.type + "] " + node.name
+                                                        );
+                                                    })
+                                                )
+                                            ),
+                                            h("div", { className: "form-group" },
+                                                h("label", null, "\u6d41\u91cf\u8d85\u51fa\uff08\u5b57\u8282\uff0c\u4f8b\u5982 107374182400 = 100GB\uff09"),
+                                                h("input", { type: "number", className: "form-control", min: 1, placeholder: "\u8bf7\u8f93\u5165\u89e6\u53d1\u9608\u503c\uff08\u5b57\u8282\uff09", value: editing.threshold || "", onChange: function(ev) { self.setField("threshold", parseInt(ev.target.value) || 0); } })
+                                            ),
+                                            h("div", { className: "form-group" },
+                                                h("label", null, "\u89e6\u53d1\u540e\u9650\u901f\uff08Mbps\uff09"),
+                                                h("input", { type: "number", className: "form-control", min: 1, placeholder: "\u8bf7\u8f93\u5165\u9650\u901f\u503c", value: editing.speed_limit || "", onChange: function(ev) { self.setField("speed_limit", parseInt(ev.target.value) || 0); } })
+                                            ),
+                                            h("div", { className: "form-group" },
+                                                h("label", null, "\u9650\u901f\u65f6\u957f\uff08\u79d2\uff0c\u4f8b\u5982 3600 = 1\u5c0f\u65f6\uff09"),
+                                                h("small", { className: "form-text text-muted", style: { marginTop: 0, marginBottom: "4px" } }, "\u89e6\u53d1\u9650\u901f\u540e\u7ecf\u8fc7\u8be5\u65f6\u957f\u81ea\u52a8\u89e3\u9664\uff0c\u89e3\u9664\u540e\u5f00\u59cb\u4e0b\u4e2a\u5468\u671f"),
+                                                h("input", { type: "number", className: "form-control", min: 60, placeholder: "\u8bf7\u8f93\u5165\u9650\u901f\u65f6\u957f\u79d2\u6570", value: editing.limit_duration || "", onChange: function(ev) { self.setField("limit_duration", parseInt(ev.target.value) || 0); } })
+                                            ),
+                                            h("div", { className: "form-group" },
+                                                h("label", { className: "form-check", style: { position: "relative", display: "block" } },
+                                                    h("input", { type: "checkbox", checked: !!editing.disconnect_existing_connections, onChange: function(ev) { self.setField("disconnect_existing_connections", ev.target.checked ? 1 : 0); }, style: { position: "static", marginRight: "6px" } }),
+                                                    "\u6253\u65ad\u5df2\u6709\u8fde\u63a5"
+                                                ),
+                                                h("small", { className: "form-text text-muted", style: { marginTop: "4px" } }, "\u5f00\u542f\u540e\uff0c\u89e6\u53d1\u9650\u901f\u65f6\u4f1a\u5f3a\u5236\u65ad\u5f00\u8be5\u7528\u6237\u5728\u9009\u4e2d\u8282\u70b9\u4e0a\u5df2\u5efa\u7acb\u7684\u8fde\u63a5\uff08\u5982\u6b63\u5728\u4e0b\u8f7d\u7684\u5927\u6587\u4ef6\u3001\u6b63\u5728\u64ad\u653e\u7684\u89c6\u9891\uff09\uff0c\u8ba9\u5176\u91cd\u65b0\u8fde\u63a5\u540e\u7acb\u5373\u751f\u6548\u65b0\u7684\u9650\u901f\u503c\uff1b\u5426\u5219\u5df2\u5efa\u7acb\u7684\u8fde\u63a5\u53ef\u80fd\u4e0d\u4f1a\u611f\u77e5\u65b0\u9650\u901f\uff0c\u8981\u7b49\u5230\u91cd\u65b0\u8fde\u63a5\u624d\u4f1a\u751f\u6548\u3002\u4ec5\u65ad\u5f00\u8fde\u63a5\uff0c\u4e0d\u4f1a\u5f71\u54cd\u7528\u6237\u4e0e\u8282\u70b9\u672c\u8eab\u7684\u8fde\u63a5\u3002")
+                                            )
+                                        ),
+                                        h("div", { className: "modal-footer" },
+                                            h("button", { type: "button", className: "btn btn-alt-secondary", onClick: function() { self.closeModal(); } }, "\u53d6\u6d88"),
+                                            h("button", { type: "button", className: "btn btn-primary", disabled: s.saveLoading, onClick: function() { self.save(); } }, s.saveLoading ? "\u4fdd\u5b58\u4e2d..." : "\u63d0\u4ea4")
+                                        )
+                                    )
+                                )
+                            ) : null
+                        );
+                    }
+                };
+            }()
+        }, {
+            path: "/server/speedlimit/manage",
+            exact: !0,
+            component: function() {
+                var Rr = n("q1tI");
+                var React = (Rr && Rr.createElement) ? Rr : (Rr.default || Rr);
+                var h = React.createElement;
+                function apiBase() {
+                    return (window.settings && window.settings.host) ? window.settings.host : window.location.origin;
+                }
+                function securePath() {
+                    return (window.settings.secure_path || "").replace("/", "");
+                }
+                function authHeaders() {
+                    return { "authorization": window.localStorage.getItem("authorization") };
+                }
+                function formatBytes(v) {
+                    v = parseInt(v) || 0;
+                    var kb = 1024, mb = 1048576, gb = 1073741824;
+                    if (v > gb) return (v / gb).toFixed(2) + " GB";
+                    if (v > mb) return (v / mb).toFixed(2) + " MB";
+                    if (v > kb) return (v / kb).toFixed(2) + " KB";
+                    return v + " B";
+                }
+                function formatTime(ts) {
+                    if (!ts) return "-";
+                    return new Date(ts * 1000).toLocaleString();
+                }
+                function getQueryParam(name) {
+                    var search = window.location.hash.indexOf("?") > -1 ? window.location.hash.split("?")[1] : "";
+                    var params = new URLSearchParams(search);
+                    return params.get(name);
+                }
+                return class SpeedLimitManagePage extends React.Component {
+                    constructor(e) {
+                        super(e);
+                        this.ruleId = getQueryParam("rule_id");
+                        this.ruleName = getQueryParam("name") || "";
+                        this.state = {
+                            records: [],
+                            total: 0,
+                            current: 1,
+                            pageSize: 10,
+                            email: "",
+                            loading: false,
+                            detailRecord: null
+                        };
+                    }
+                    componentDidMount() {
+                        this.load();
+                    }
+                    load() {
+                        var self = this;
+                        if (!this.ruleId) return;
+                        self.setState({ loading: true });
+                        var url = apiBase() + "/api/v1/" + securePath() + "/server/speedlimit/records?rule_id=" + this.ruleId + "&current=" + this.state.current + "&page_size=" + this.state.pageSize;
+                        if (this.state.email) url += "&email=" + encodeURIComponent(this.state.email);
+                        fetch(url, { method: "GET", headers: authHeaders(), credentials: "include" })
+                            .then(function(r) { return r.json(); })
+                            .then(function(res) {
+                                self.setState({ records: (res && res.data) || [], total: (res && res.total) || 0, loading: false });
+                            }).catch(function() { self.setState({ loading: false }); });
+                    }
+                    search() {
+                        this.setState({ current: 1 }, () => this.load());
+                    }
+                    changePage(p) {
+                        var self = this;
+                        var totalPages = Math.max(1, Math.ceil(this.state.total / this.state.pageSize));
+                        if (p < 1 || p > totalPages) return;
+                        this.setState({ current: p }, function() { self.load(); });
+                    }
+                    release(record) {
+                        var self = this;
+                        if (!window.confirm("\u786e\u5b9a\u8981\u89e3\u9664\u7528\u6237 " + record.email + " \u7684\u9650\u901f\u5417\uff1f\u89e3\u9664\u540e\u672c\u5468\u671f\u7ed3\u675f\uff0c\u4e0b\u6b21\u4ea7\u751f\u6d41\u91cf\u5c06\u91cd\u65b0\u8ba1\u65f6\u3002")) return;
+                        fetch(apiBase() + "/api/v1/" + securePath() + "/server/speedlimit/release", {
+                            method: "POST",
+                            headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
+                            credentials: "include",
+                            body: JSON.stringify({ id: record.id })
+                        }).then(function(r) { return r.json(); }).then(function() { self.load(); });
+                    }
+                    showDetail(record) {
+                        this.setState({ detailRecord: record });
+                    }
+                    closeDetail() {
+                        this.setState({ detailRecord: null });
+                    }
+                    back() {
+                        window.g_history && window.g_history.push("/server/speedlimit");
+                    }
+                    render() {
+                        var self = this;
+                        var s = this.state;
+                        var rows = (s.records || []).map(function(record) {
+                            return h("tr", { key: record.id },
+                                h("td", null, record.email),
+                                h("td", null, formatTime(record.triggered_at)),
+                                h("td", null, formatTime(record.release_at)),
+                                h("td", null,
+                                    h("a", { href: "javascript:void(0);", onClick: function() { self.showDetail(record); } }, formatBytes(record.total))
+                                ),
+                                h("td", null, h("a", { href: "javascript:void(0);", onClick: function() { self.release(record); } }, "\u89e3\u9664"))
+                            );
+                        });
+                        var totalPages = Math.max(1, Math.ceil(s.total / s.pageSize));
+                        var Layout = n("Bl7J").a;
+                        var detail = s.detailRecord;
+                        return h(Layout, Object.assign({}, this.props, { title: "\u52a8\u6001\u9650\u901f\u7ba1\u7406" }),
+                            h("div", { className: "block block-rounded" },
+                                h("div", { className: "block-header block-header-default" },
+                                    h("h3", { className: "block-title" }, "\u52a8\u6001\u9650\u901f\u7ba1\u7406\uff1a" + self.ruleName),
+                                    h("div", { className: "block-options" },
+                                        h("input", { type: "text", className: "form-control form-control-sm", style: { display: "inline-block", width: "180px", marginRight: "8px" }, placeholder: "\u90ae\u7bb1\u641c\u7d22", value: s.email, onChange: function(ev) { self.setState({ email: ev.target.value }); }, onKeyDown: function(ev) { if (ev.key === "Enter") self.search(); } }),
+                                        h("button", { type: "button", className: "btn btn-sm btn-alt-primary", style: { marginRight: "8px" }, onClick: function() { self.search(); } }, "\u641c\u7d22"),
+                                        h("button", { type: "button", className: "btn btn-sm btn-alt-secondary", style: { marginRight: "8px" }, onClick: function() { self.back(); } }, "\u8fd4\u56de"),
+                                        h("button", { type: "button", className: "btn btn-sm btn-alt-secondary", onClick: function() { self.load(); } }, "\u5237\u65b0")
+                                    )
+                                ),
+                                h("div", { className: "block-content" },
+                                    h("div", { className: "table-responsive" },
+                                        h("table", { className: "table table-striped table-vcenter" },
+                                            h("thead", null,
+                                                h("tr", null,
+                                                    h("th", null, "\u90ae\u7bb1"),
+                                                    h("th", null, "\u9650\u901f\u65f6\u95f4"),
+                                                    h("th", null, "\u89e3\u9664\u65f6\u95f4"),
+                                                    h("th", null, "\u89e6\u53d1\u6d41\u91cf"),
+                                                    h("th", { style: { width: "90px" } }, "\u64cd\u4f5c")
+                                                )
+                                            ),
+                                            h("tbody", null, s.loading ? h("tr", null, h("td", { colSpan: 5, style: { textAlign: "center" } }, "\u52a0\u8f7d\u4e2d...")) : (rows.length ? rows : h("tr", null, h("td", { colSpan: 5, style: { textAlign: "center" } }, "\u5f53\u524d\u6ca1\u6709\u6b63\u5728\u9650\u901f\u4e2d\u7684\u7528\u6237"))))
+                                        )
+                                    ),
+                                    h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "12px" } },
+                                        h("span", { className: "text-muted" }, "\u5171 " + s.total + " \u6761"),
+                                        h("div", { style: { display: "flex", alignItems: "center" } },
+                                            h("button", { type: "button", className: "btn btn-sm btn-alt-secondary", disabled: s.current <= 1, onClick: function() { self.changePage(s.current - 1); } }, "\u4e0a\u4e00\u9875"),
+                                            h("select", { className: "form-control form-control-sm", style: { display: "inline-block", width: "auto", margin: "0 8px" }, value: s.current, onChange: function(ev) { self.changePage(parseInt(ev.target.value, 10)); } }, (function() { var opts = []; for (var p = 1; p <= totalPages; p++) { opts.push(h("option", { key: p, value: p }, "\u7b2c " + p + " \u9875")); } return opts; })()),
+                                            h("span", { className: "text-muted", style: { marginRight: "8px" } }, "/ " + totalPages),
+                                            h("button", { type: "button", className: "btn btn-sm btn-alt-secondary", disabled: s.current >= totalPages, onClick: function() { self.changePage(s.current + 1); } }, "\u4e0b\u4e00\u9875")
+                                        )
+                                    )
+                                )
+                            ),
+                            detail ? h("div", { className: "modal show", style: { display: "block", background: "rgba(0,0,0,.5)", overflowY: "auto" }, tabIndex: -1 },
+                                h("div", { className: "modal-dialog", style: { maxWidth: "480px", margin: "30px auto" } },
+                                    h("div", { className: "modal-content", style: { maxHeight: "calc(100vh - 60px)", display: "flex", flexDirection: "column" } },
+                                        h("div", { className: "modal-header", style: { flexShrink: 0 } },
+                                            h("h5", { className: "modal-title" }, detail.email + " \u2014 \u8282\u70b9\u6d41\u91cf\u660e\u7ec6"),
+                                            h("button", { type: "button", className: "close", onClick: function() { self.closeDetail(); } }, h("span", null, "\u00d7"))
+                                        ),
+                                        h("div", { className: "modal-body", style: { overflowY: "auto" } },
+                                            h("table", { className: "table table-sm table-striped" },
+                                                h("thead", null,
+                                                    h("tr", null,
+                                                        h("th", null, "\u8282\u70b9"),
+                                                        h("th", null, "\u4e0a\u4f20"),
+                                                        h("th", null, "\u4e0b\u8f7d"),
+                                                        h("th", null, "\u500d\u7387"),
+                                                        h("th", null, "\u5408\u8ba1")
+                                                    )
+                                                ),
+                                                h("tbody", null, (detail.node_traffic || []).map(function(nt, idx) {
+                                                    var rate = nt.rate || 1;
+                                                    var total = (typeof nt.total === "number") ? nt.total : Math.round(((nt.u || 0) + (nt.d || 0)) * rate);
+                                                    return h("tr", { key: idx },
+                                                        h("td", null, nt.name || ("[" + nt.type + "] #" + nt.id)),
+                                                        h("td", null, formatBytes(nt.u)),
+                                                        h("td", null, formatBytes(nt.d)),
+                                                        h("td", null, rate + "x"),
+                                                        h("td", null, formatBytes(total))
+                                                    );
+                                                }))
+                                            )
+                                        ),
+                                        h("div", { className: "modal-footer" },
+                                            h("button", { type: "button", className: "btn btn-alt-secondary", onClick: function() { self.closeDetail(); } }, "\u5173\u95ed")
+                                        )
+                                    )
+                                )
+                            ) : null
+                        );
+                    }
+                };
+            }()
+        }, {
+            path: "/server/speedlimit/history",
+            exact: !0,
+            component: function() {
+                var Rr = n("q1tI");
+                var React = (Rr && Rr.createElement) ? Rr : (Rr.default || Rr);
+                var h = React.createElement;
+                function apiBase() {
+                    return (window.settings && window.settings.host) ? window.settings.host : window.location.origin;
+                }
+                function securePath() {
+                    return (window.settings.secure_path || "").replace("/", "");
+                }
+                function authHeaders() {
+                    return { "authorization": window.localStorage.getItem("authorization") };
+                }
+                function formatBytes(v) {
+                    v = parseInt(v) || 0;
+                    var kb = 1024, mb = 1048576, gb = 1073741824;
+                    if (v > gb) return (v / gb).toFixed(2) + " GB";
+                    if (v > mb) return (v / mb).toFixed(2) + " MB";
+                    if (v > kb) return (v / kb).toFixed(2) + " KB";
+                    return v + " B";
+                }
+                function formatTime(ts) {
+                    if (!ts) return "-";
+                    return new Date(ts * 1000).toLocaleString();
+                }
+                function getQueryParam(name) {
+                    var search = window.location.hash.indexOf("?") > -1 ? window.location.hash.split("?")[1] : "";
+                    var params = new URLSearchParams(search);
+                    return params.get(name);
+                }
+                return class SpeedLimitHistoryPage extends React.Component {
+                    constructor(e) {
+                        super(e);
+                        this.ruleId = getQueryParam("rule_id");
+                        this.ruleName = getQueryParam("name") || "";
+                        this.state = {
+                            records: [],
+                            total: 0,
+                            current: 1,
+                            pageSize: 10,
+                            email: "",
+                            loading: false,
+                            detailRecord: null
+                        };
+                    }
+                    componentDidMount() {
+                        this.load();
+                    }
+                    load() {
+                        var self = this;
+                        if (!this.ruleId) return;
+                        self.setState({ loading: true });
+                        var url = apiBase() + "/api/v1/" + securePath() + "/server/speedlimit/history?rule_id=" + this.ruleId + "&current=" + this.state.current + "&page_size=" + this.state.pageSize;
+                        if (this.state.email) url += "&email=" + encodeURIComponent(this.state.email);
+                        fetch(url, { method: "GET", headers: authHeaders(), credentials: "include" })
+                            .then(function(r) { return r.json(); })
+                            .then(function(res) {
+                                self.setState({ records: (res && res.data) || [], total: (res && res.total) || 0, loading: false });
+                            }).catch(function() { self.setState({ loading: false }); });
+                    }
+                    search() {
+                        this.setState({ current: 1 }, () => this.load());
+                    }
+                    changePage(p) {
+                        var self = this;
+                        var totalPages = Math.max(1, Math.ceil(this.state.total / this.state.pageSize));
+                        if (p < 1 || p > totalPages) return;
+                        this.setState({ current: p }, function() { self.load(); });
+                    }
+                    clear() {
+                        var self = this;
+                        if (!window.confirm("\u786e\u5b9a\u8981\u6e05\u7a7a\u8be5\u89c4\u5219\u7684\u5386\u53f2\u8bb0\u5f55\u5417\uff1f\u6b64\u64cd\u4f5c\u4e0d\u53ef\u6062\u590d\u3002")) return;
+                        fetch(apiBase() + "/api/v1/" + securePath() + "/server/speedlimit/clearHistory", {
+                            method: "POST",
+                            headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
+                            credentials: "include",
+                            body: JSON.stringify({ rule_id: this.ruleId })
+                        }).then(function(r) { return r.json(); }).then(function() { self.setState({ current: 1 }, function() { self.load(); }); });
+                    }
+                    showDetail(record) {
+                        this.setState({ detailRecord: record });
+                    }
+                    closeDetail() {
+                        this.setState({ detailRecord: null });
+                    }
+                    back() {
+                        window.g_history && window.g_history.push("/server/speedlimit");
+                    }
+                    render() {
+                        var self = this;
+                        var s = this.state;
+                        var rows = (s.records || []).map(function(record) {
+                            return h("tr", { key: record.id },
+                                h("td", null, record.email),
+                                h("td", null, formatTime(record.triggered_at)),
+                                h("td", null, formatTime(record.released_at)),
+                                h("td", null,
+                                    h("a", { href: "javascript:void(0);", onClick: function() { self.showDetail(record); } }, formatBytes(record.total))
+                                ),
+                                h("td", null, record.release_type === "manual" ? h("span", { className: "badge badge-warning" }, "\u624b\u52a8\u89e3\u9664") : h("span", { className: "badge badge-secondary" }, "\u5230\u671f\u89e3\u9664"))
+                            );
+                        });
+                        var totalPages = Math.max(1, Math.ceil(s.total / s.pageSize));
+                        var Layout = n("Bl7J").a;
+                        var detail = s.detailRecord;
+                        return h(Layout, Object.assign({}, this.props, { title: "\u52a8\u6001\u9650\u901f\u5386\u53f2\u8bb0\u5f55" }),
+                            h("div", { className: "block block-rounded" },
+                                h("div", { className: "block-header block-header-default" },
+                                    h("h3", { className: "block-title" }, "\u5386\u53f2\u8bb0\u5f55\uff1a" + self.ruleName),
+                                    h("div", { className: "block-options" },
+                                        h("input", { type: "text", className: "form-control form-control-sm", style: { display: "inline-block", width: "180px", marginRight: "8px" }, placeholder: "\u90ae\u7bb1\u641c\u7d22", value: s.email, onChange: function(ev) { self.setState({ email: ev.target.value }); }, onKeyDown: function(ev) { if (ev.key === "Enter") self.search(); } }),
+                                        h("button", { type: "button", className: "btn btn-sm btn-alt-primary", style: { marginRight: "8px" }, onClick: function() { self.search(); } }, "\u641c\u7d22"),
+                                        h("button", { type: "button", className: "btn btn-sm btn-alt-secondary", style: { marginRight: "8px" }, onClick: function() { self.back(); } }, "\u8fd4\u56de"),
+                                        h("button", { type: "button", className: "btn btn-sm btn-alt-secondary", style: { marginRight: "8px" }, onClick: function() { self.load(); } }, "\u5237\u65b0"),
+                                        h("button", { type: "button", className: "btn btn-sm btn-alt-danger", onClick: function() { self.clear(); } }, "\u6e05\u7a7a")
+                                    )
+                                ),
+                                h("div", { className: "block-content" },
+                                    h("div", { className: "table-responsive" },
+                                        h("table", { className: "table table-striped table-vcenter" },
+                                            h("thead", null,
+                                                h("tr", null,
+                                                    h("th", null, "\u90ae\u7bb1"),
+                                                    h("th", null, "\u9650\u901f\u65f6\u95f4"),
+                                                    h("th", null, "\u89e3\u9664\u65f6\u95f4"),
+                                                    h("th", null, "\u89e6\u53d1\u6d41\u91cf"),
+                                                    h("th", { style: { width: "100px" } }, "\u72b6\u6001")
+                                                )
+                                            ),
+                                            h("tbody", null, s.loading ? h("tr", null, h("td", { colSpan: 5, style: { textAlign: "center" } }, "\u52a0\u8f7d\u4e2d...")) : (rows.length ? rows : h("tr", null, h("td", { colSpan: 5, style: { textAlign: "center" } }, "\u6682\u65e0\u5386\u53f2\u8bb0\u5f55"))))
+                                        )
+                                    ),
+                                    h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "12px" } },
+                                        h("span", { className: "text-muted" }, "\u5171 " + s.total + " \u6761\uff0c\u5386\u53f2\u8bb0\u5f55\u4fdd\u7559 7 \u5929"),
+                                        h("div", { style: { display: "flex", alignItems: "center" } },
+                                            h("button", { type: "button", className: "btn btn-sm btn-alt-secondary", disabled: s.current <= 1, onClick: function() { self.changePage(s.current - 1); } }, "\u4e0a\u4e00\u9875"),
+                                            h("select", { className: "form-control form-control-sm", style: { display: "inline-block", width: "auto", margin: "0 8px" }, value: s.current, onChange: function(ev) { self.changePage(parseInt(ev.target.value, 10)); } }, (function() { var opts = []; for (var p = 1; p <= totalPages; p++) { opts.push(h("option", { key: p, value: p }, "\u7b2c " + p + " \u9875")); } return opts; })()),
+                                            h("span", { className: "text-muted", style: { marginRight: "8px" } }, "/ " + totalPages),
+                                            h("button", { type: "button", className: "btn btn-sm btn-alt-secondary", disabled: s.current >= totalPages, onClick: function() { self.changePage(s.current + 1); } }, "\u4e0b\u4e00\u9875")
+                                        )
+                                    )
+                                )
+                            ),
+                            detail ? h("div", { className: "modal show", style: { display: "block", background: "rgba(0,0,0,.5)", overflowY: "auto" }, tabIndex: -1 },
+                                h("div", { className: "modal-dialog", style: { maxWidth: "480px", margin: "30px auto" } },
+                                    h("div", { className: "modal-content", style: { maxHeight: "calc(100vh - 60px)", display: "flex", flexDirection: "column" } },
+                                        h("div", { className: "modal-header", style: { flexShrink: 0 } },
+                                            h("h5", { className: "modal-title" }, detail.email + " \u2014 \u8282\u70b9\u6d41\u91cf\u660e\u7ec6"),
+                                            h("button", { type: "button", className: "close", onClick: function() { self.closeDetail(); } }, h("span", null, "\u00d7"))
+                                        ),
+                                        h("div", { className: "modal-body", style: { overflowY: "auto" } },
+                                            h("table", { className: "table table-sm table-striped" },
+                                                h("thead", null,
+                                                    h("tr", null,
+                                                        h("th", null, "\u8282\u70b9"),
+                                                        h("th", null, "\u4e0a\u4f20"),
+                                                        h("th", null, "\u4e0b\u8f7d"),
+                                                        h("th", null, "\u500d\u7387"),
+                                                        h("th", null, "\u5408\u8ba1")
+                                                    )
+                                                ),
+                                                h("tbody", null, (detail.node_traffic || []).map(function(nt, idx) {
+                                                    var rate = nt.rate || 1;
+                                                    var total = (typeof nt.total === "number") ? nt.total : Math.round(((nt.u || 0) + (nt.d || 0)) * rate);
+                                                    return h("tr", { key: idx },
+                                                        h("td", null, nt.name || ("[" + nt.type + "] #" + nt.id)),
+                                                        h("td", null, formatBytes(nt.u)),
+                                                        h("td", null, formatBytes(nt.d)),
+                                                        h("td", null, rate + "x"),
+                                                        h("td", null, formatBytes(total))
+                                                    );
+                                                }))
+                                            )
+                                        ),
+                                        h("div", { className: "modal-footer" },
+                                            h("button", { type: "button", className: "btn btn-alt-secondary", onClick: function() { self.closeDetail(); } }, "\u5173\u95ed")
+                                        )
+                                    )
+                                )
+                            ) : null
+                        );
+                    }
+                };
+            }()
         }, {
             path: "/ticket/:ticket_id",
             exact: !0,

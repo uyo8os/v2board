@@ -176,6 +176,7 @@ return [
                     'order_handle',
                     'traffic_fetch',
                     'stat',
+                    'speed_limit',
                     'send_email',
                     'send_email_mass',
                     'send_telegram',

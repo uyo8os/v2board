@@ -859,3 +859,54 @@ CHANGE `action_value` `action_value` text NULL AFTER `action`;
 
 ALTER TABLE `v2_server_v2node`
 ADD `trusted_x_forwarded_for` varchar(255) COLLATE 'utf8mb4_general_ci' NULL COMMENT '信任的x-forwarded-for头部' AFTER `network_settings`;
+
+CREATE TABLE `v2_speed_limit_rule` (
+                                   `id` int(11) NOT NULL AUTO_INCREMENT,
+                                   `name` varchar(255) NOT NULL COMMENT '规则名称',
+                                   `node_ids` text NOT NULL COMMENT '限速节点列表，JSON数组[{type,id}]',
+                                   `period` int(11) NOT NULL COMMENT '时间周期，单位秒',
+                                   `threshold` bigint(20) NOT NULL COMMENT '触发流量阈值，单位字节',
+                                   `speed_limit` int(11) NOT NULL COMMENT '触发后限速值，单位Mbps',
+                                   `enable` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否启用',
+                                   `created_at` int(11) NOT NULL,
+                                   `updated_at` int(11) NOT NULL,
+                                   PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='动态限速规则表';
+
+CREATE TABLE `v2_speed_limit_record` (
+                                   `id` int(11) NOT NULL AUTO_INCREMENT,
+                                   `rule_id` int(11) NOT NULL COMMENT '规则id',
+                                   `user_id` int(11) NOT NULL COMMENT '用户id',
+                                   `window_start_at` int(11) NOT NULL COMMENT '当前周期开始时间',
+                                   `window_end_at` int(11) NOT NULL COMMENT '当前周期结束时间',
+                                   `u` bigint(20) NOT NULL DEFAULT '0' COMMENT '周期内上传流量',
+                                   `d` bigint(20) NOT NULL DEFAULT '0' COMMENT '周期内下载流量',
+                                   `node_traffic` text DEFAULT NULL COMMENT '各节点流量明细JSON',
+                                   `triggered` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否已触发限速',
+                                   `triggered_at` int(11) DEFAULT NULL COMMENT '触发限速时间',
+                                   `released_at` int(11) DEFAULT NULL COMMENT '手动解除时间',
+                                   `created_at` int(11) NOT NULL,
+                                   `updated_at` int(11) NOT NULL,
+                                   PRIMARY KEY (`id`),
+                                   UNIQUE KEY `rule_id_user_id_window_start_at` (`rule_id`,`user_id`,`window_start_at`),
+                                   KEY `user_id` (`user_id`),
+                                   KEY `triggered` (`triggered`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='动态限速触发记录表';
+
+ALTER TABLE `v2_speed_limit_rule`
+CHANGE `period` `trigger_period` int(11) NOT NULL COMMENT '触发时间窗口，单位秒，用户级别，从该用户本窗口第一次产生流量起算';
+
+ALTER TABLE `v2_speed_limit_rule`
+ADD `limit_duration` int(11) NOT NULL DEFAULT '3600' COMMENT '限速时长，单位秒，触发后经过该时长自动解除' AFTER `speed_limit`;
+
+TRUNCATE TABLE `v2_speed_limit_record`;
+
+ALTER TABLE `v2_speed_limit_record`
+ADD `release_at` int(11) DEFAULT NULL COMMENT '计划自动解除时间=触发时间+limit_duration' AFTER `triggered_at`,
+ADD `release_type` varchar(10) DEFAULT NULL COMMENT '解除方式：auto自动到期 manual手动解除' AFTER `released_at`,
+ADD INDEX `released_at` (`released_at`);
+
+ALTER TABLE `v2_speed_limit_rule`
+ADD `disconnect_existing_connections` tinyint(1) NOT NULL DEFAULT '0' COMMENT '触发时是否强制打断该用户在选中节点上已建立的连接' AFTER `limit_duration`;
+
+TRUNCATE TABLE `v2_speed_limit_record`;

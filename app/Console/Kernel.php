@@ -39,6 +39,9 @@ class Kernel extends ConsoleKernel
         // reset
         $schedule->command('reset:traffic')->daily();
         $schedule->command('reset:log')->daily();
+        // speed limit
+        $schedule->command('speedlimit:release')->everyMinute()->withoutOverlapping();
+        $schedule->command('speedlimit:cleanHistory')->daily();
         // send
         $schedule->command('send:remindMail')->dailyAt('11:30');
         // horizon metrics

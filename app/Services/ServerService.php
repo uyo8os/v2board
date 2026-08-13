@@ -248,9 +248,9 @@ class ServerService
         }, $servers);
     }
 
-    public function getAvailableUsers($groupId)
+    public function getAvailableUsers($groupId, $nodeType = null, $nodeId = null)
     {
-        return User::whereIn('group_id', $groupId)
+        $users = User::whereIn('group_id', $groupId)
             ->whereRaw('u + d < transfer_enable')
             ->where(function ($query) {
                 $query->where('expired_at', '>=', time())
@@ -264,6 +264,29 @@ class ServerService
                 'device_limit'
             ])
             ->get();
+
+        if ($nodeType !== null && $nodeId !== null) {
+            $speedLimitService = new \App\Services\SpeedLimitService();
+            $overrideMap = $speedLimitService->getEffectiveSpeedLimitMapForNode($nodeType, $nodeId);
+            if (!empty($overrideMap)) {
+                foreach ($users as $user) {
+                    if (isset($overrideMap[$user->id])) {
+                        $user->speed_limit = $overrideMap[$user->id];
+                    }
+                }
+            }
+            // 消费该用户在本节点上的一次性强制断连信号（动态限速规则勾选了
+            // "打断已有连接"时写入）：命中的用户在本次响应中带上 kick=true，
+            // 节点收到后会强制断开其在本节点上已建立的连接。信号消费后立即
+            // 清除，不会在下一次轮询重复下发。
+            foreach ($users as $user) {
+                if ($speedLimitService->consumeKickSignal($nodeType, $nodeId, $user->id)) {
+                    $user->kick = true;
+                }
+            }
+        }
+
+        return $users;
     }
 
     public function log(int $userId, int $serverId, int $u, int $d, float $rate, string $method)
@@ -395,7 +418,7 @@ class ServerService
             $apiHostArg = escapeshellarg((string) $apiHost);
             $apiKeyArg = escapeshellarg((string) $apiKey);
             $servers[$k]['install_command'] = sprintf(
-                'wget -N https://raw.githubusercontent.com/wyx2685/v2node/master/script/install.sh && bash install.sh --api-host %s --node-id %d --api-key %s',
+                'wget -N https://raw.githubusercontent.com/uyo8os/v2node/master/script/install.sh && bash install.sh --api-host %s --node-id %d --api-key %s',
                 $apiHostArg,
                 $nodeId,
                 $apiKeyArg

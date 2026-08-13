@@ -299,6 +299,48 @@ CREATE TABLE `v2_server_route` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 
+DROP TABLE IF EXISTS `v2_speed_limit_rule`;
+CREATE TABLE `v2_speed_limit_rule` (
+                                   `id` int(11) NOT NULL AUTO_INCREMENT,
+                                   `name` varchar(255) NOT NULL COMMENT '规则名称',
+                                   `node_ids` text NOT NULL COMMENT '限速节点列表，JSON数组[{type,id}]',
+                                   `trigger_period` int(11) NOT NULL COMMENT '触发时间窗口，单位秒，用户级别，从该用户本窗口第一次产生流量起算',
+                                   `threshold` bigint(20) NOT NULL COMMENT '触发流量阈值，单位字节',
+                                   `speed_limit` int(11) NOT NULL COMMENT '触发后限速值，单位Mbps',
+                                   `limit_duration` int(11) NOT NULL DEFAULT '3600' COMMENT '限速时长，单位秒，触发后经过该时长自动解除',
+                                   `disconnect_existing_connections` tinyint(1) NOT NULL DEFAULT '0' COMMENT '触发时是否强制打断该用户在选中节点上已建立的连接',
+                                   `enable` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否启用',
+                                   `created_at` int(11) NOT NULL,
+                                   `updated_at` int(11) NOT NULL,
+                                   PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='动态限速规则表';
+
+
+DROP TABLE IF EXISTS `v2_speed_limit_record`;
+CREATE TABLE `v2_speed_limit_record` (
+                                   `id` int(11) NOT NULL AUTO_INCREMENT,
+                                   `rule_id` int(11) NOT NULL COMMENT '规则id',
+                                   `user_id` int(11) NOT NULL COMMENT '用户id',
+                                   `window_start_at` int(11) NOT NULL COMMENT '本用户当前窗口开始时间',
+                                   `window_end_at` int(11) NOT NULL COMMENT '本用户当前窗口结束时间',
+                                   `u` bigint(20) NOT NULL DEFAULT '0' COMMENT '窗口内上传流量',
+                                   `d` bigint(20) NOT NULL DEFAULT '0' COMMENT '窗口内下载流量',
+                                   `node_traffic` text DEFAULT NULL COMMENT '各节点流量明细JSON',
+                                   `triggered` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否已触发限速',
+                                   `triggered_at` int(11) DEFAULT NULL COMMENT '触发限速时间',
+                                   `release_at` int(11) DEFAULT NULL COMMENT '计划自动解除时间=触发时间+limit_duration',
+                                   `released_at` int(11) DEFAULT NULL COMMENT '实际解除完成时间',
+                                   `release_type` varchar(10) DEFAULT NULL COMMENT '解除方式：auto自动到期 manual手动解除',
+                                   `created_at` int(11) NOT NULL,
+                                   `updated_at` int(11) NOT NULL,
+                                   PRIMARY KEY (`id`),
+                                   UNIQUE KEY `rule_id_user_id_window_start_at` (`rule_id`,`user_id`,`window_start_at`),
+                                   KEY `user_id` (`user_id`),
+                                   KEY `triggered` (`triggered`),
+                                   KEY `released_at` (`released_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='动态限速触发记录表';
+
+
 DROP TABLE IF EXISTS `v2_server_shadowsocks`;
 CREATE TABLE `v2_server_shadowsocks` (
                                          `id` int(11) NOT NULL AUTO_INCREMENT,

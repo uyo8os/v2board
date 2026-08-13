@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Jobs\SpeedLimitTrafficJob;
 use App\Jobs\StatServerJob;
 use App\Jobs\StatUserJob;
 use App\Jobs\TrafficFetchJob;
@@ -226,6 +227,7 @@ class UserService
         TrafficFetchJob::dispatch($data, $server, $protocol);
         StatUserJob::dispatch($data, $server, $protocol, 'd');
         StatServerJob::dispatch($data, $server, $protocol, 'd');
+        SpeedLimitTrafficJob::dispatch($data, $server, $protocol);
     }
 
     public static function getMaxId()

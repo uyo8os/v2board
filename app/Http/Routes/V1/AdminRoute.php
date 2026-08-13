@@ -31,6 +31,14 @@ class AdminRoute
             $router->get ('/server/route/fetch', 'V1\\Admin\\Server\\RouteController@fetch');
             $router->post('/server/route/save', 'V1\\Admin\\Server\\RouteController@save');
             $router->post('/server/route/drop', 'V1\\Admin\\Server\\RouteController@drop');
+            $router->get ('/server/speedlimit/fetch', 'V1\\Admin\\Server\\SpeedLimitController@fetch');
+            $router->post('/server/speedlimit/save', 'V1\\Admin\\Server\\SpeedLimitController@save');
+            $router->post('/server/speedlimit/drop', 'V1\\Admin\\Server\\SpeedLimitController@drop');
+            $router->post('/server/speedlimit/toggle', 'V1\\Admin\\Server\\SpeedLimitController@toggle');
+            $router->get ('/server/speedlimit/records', 'V1\\Admin\\Server\\SpeedLimitController@records');
+            $router->post('/server/speedlimit/release', 'V1\\Admin\\Server\\SpeedLimitController@release');
+            $router->get ('/server/speedlimit/history', 'V1\\Admin\\Server\\SpeedLimitController@history');
+            $router->post('/server/speedlimit/clearHistory', 'V1\\Admin\\Server\\SpeedLimitController@clearHistory');
             $router->get ('/server/manage/getNodes', 'V1\\Admin\\Server\\ManageController@getNodes');
             $router->post('/server/manage/sort', 'V1\\Admin\\Server\\ManageController@sort');
             $router->group([
