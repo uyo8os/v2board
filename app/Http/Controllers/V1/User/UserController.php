@@ -345,6 +345,7 @@ class UserController extends Controller
         $user['alive_ip'] = $countalive;
 
         $user['subscribe_url'] = Helper::getSubscribeUrl($user['token']);
+        $user['subscribe_url_backup'] = Helper::getBackupSubscribeUrl($user['token']);
 
         $userService = new UserService();
         $user['reset_day'] = $userService->getResetDay($user);

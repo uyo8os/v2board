@@ -5706,6 +5706,15 @@
                     defaultValue: t.subscribe_url,
                     onChange: e => this.set("site", "subscribe_url", e.target.value)
                 })), f.a.createElement(m, {
+                    title: "\u5907\u7528\u8ba2\u9605URL",
+                    description: "\u7528\u4e8e\u4e3a\u7528\u6237\u63d0\u4f9b\u5907\u7528\u8ba2\u9605\u5730\u5740\uff0c\u7559\u7a7a\u5219\u4e0d\u663e\u793a\u3002"
+                }, f.a.createElement("input", {
+                    type: "text",
+                    className: "form-control",
+                    placeholder: "\u8bf7\u8f93\u5165\u5907\u7528\u8ba2\u9605URL\uff0c\u672b\u5c3e\u4e0d\u8981/",
+                    defaultValue: t.subscribe_url_backup,
+                    onChange: e=>this.set("site", "subscribe_url_backup", e.target.value)
+                })), f.a.createElement(m, {
                     title: "\u8ba2\u9605\u8def\u5f84",
                     description: "\u7528\u4e8e\u8ba2\u9605\u6240\u4f7f\u7528\uff0c\u7559\u7a7a\u5219\u4e3a/api/v1/client/subscribe\u3002\u5982\u9700\u66f4\u6362\u4e0d\u540c\u7684\u8ba2\u9605\u8def\u5f84\u8bf7\u8bbe\u7f6e\u3002"
                 }, f.a.createElement("input", {
