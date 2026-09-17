@@ -352,7 +352,8 @@ class UserController extends Controller
         $user['allow_new_period'] = config('v2board.allow_new_period', 0);
         return response([
             'data' => $user
-        ]);
+        ])->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+            ->header('Pragma', 'no-cache');
     }
 
     public function unbindTelegram(Request $request)
