@@ -31495,7 +31495,7 @@
                     max: 8760,
                     addonAfter: "\u5c0f\u65f6",
                     disabled: 1 !== Number(this.state.submit.auto_popup),
-                    value: this.state.submit.popup_interval || 24,
+                    value: this.state.submit.popup_interval == null ? 24 : this.state.submit.popup_interval,
                     placeholder: "\u8bf7\u8f93\u5165\u81ea\u52a8\u5f39\u51fa\u95f4\u9694",
                     onChange: e=>{
                         this.setState({
