@@ -22,8 +22,13 @@ class NoticeController extends Controller
         $data = $request->only([
             'title',
             'content',
-            'img_url'
+            'img_url',
+            'tags',
+            'auto_popup',
+            'popup_interval'
         ]);
+        $data['auto_popup'] = $request->boolean('auto_popup') ? 1 : 0;
+        $data['popup_interval'] = max(1, (int) $request->input('popup_interval', 24));
         if (!$request->input('id')) {
             if (!Notice::create($data)) {
                 abort(500, '保存失败');

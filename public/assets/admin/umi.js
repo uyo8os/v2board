@@ -31472,6 +31472,38 @@
                             })
                         })
                     }
+                })), g.a.createElement("div", {
+                    className: "form-group d-flex align-items-center justify-content-between"
+                }, g.a.createElement("label", {
+                    for: "example-text-input-alt"
+                }, "\u81ea\u52a8\u5f39\u51fa"), g.a.createElement(f["a"], {
+                    checked: 1 === Number(this.state.submit.auto_popup),
+                    onChange: e=>{
+                        this.setState({
+                            submit: p()({}, this.state.submit, {
+                                auto_popup: e ? 1 : 0
+                            })
+                        })
+                    }
+                })), g.a.createElement("div", {
+                    className: "form-group"
+                }, g.a.createElement("label", {
+                    for: "example-text-input-alt"
+                }, "\u5f39\u51fa\u95f4\u9694\uff08\u5c0f\u65f6\uff09"), g.a.createElement(s["a"], {
+                    type: "number",
+                    min: 1,
+                    max: 8760,
+                    addonAfter: "\u5c0f\u65f6",
+                    disabled: 1 !== Number(this.state.submit.auto_popup),
+                    value: this.state.submit.popup_interval || 24,
+                    placeholder: "\u8bf7\u8f93\u5165\u81ea\u52a8\u5f39\u51fa\u95f4\u9694",
+                    onChange: e=>{
+                        this.setState({
+                            submit: p()({}, this.state.submit, {
+                                popup_interval: e.target.value
+                            })
+                        })
+                    }
                 })))))
             }
         }

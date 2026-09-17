@@ -536,6 +536,10 @@ DROP `server_type`;
 ALTER TABLE `v2_notice`
     ADD `tags` varchar(255) COLLATE 'utf8_general_ci' NULL AFTER `img_url`;
 
+ALTER TABLE `v2_notice`
+    ADD `auto_popup` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否自动弹出' AFTER `tags`,
+    ADD `popup_interval` int(11) NOT NULL DEFAULT '24' COMMENT '自动弹出间隔，单位小时' AFTER `auto_popup`;
+
 ALTER TABLE `v2_ticket`
 ADD `reply_status` tinyint(1) NOT NULL DEFAULT '1' COMMENT '0:待回复 1:已回复' AFTER `status`;
 

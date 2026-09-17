@@ -137,6 +137,8 @@ CREATE TABLE `v2_notice` (
                              `show` tinyint(1) NOT NULL DEFAULT '0',
                              `img_url` varchar(255) DEFAULT NULL,
                              `tags` varchar(255) DEFAULT NULL,
+                             `auto_popup` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否自动弹出',
+                             `popup_interval` int(11) NOT NULL DEFAULT '24' COMMENT '自动弹出间隔，单位小时',
                              `created_at` int(11) NOT NULL,
                              `updated_at` int(11) NOT NULL,
                              PRIMARY KEY (`id`)
