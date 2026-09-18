@@ -92,6 +92,7 @@ class ConfigSave extends FormRequest
         'android_version' => '',
         'android_download_url' => '',
         // safe
+        'email_qq_numeric_only' => 'in:0,1',
         'email_whitelist_enable' => 'in:0,1',
         'email_whitelist_suffix' => 'nullable|array',
         'email_gmail_limit_enable' => 'in:0,1',

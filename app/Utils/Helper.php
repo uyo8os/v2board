@@ -79,6 +79,14 @@ class Helper
         return true;
     }
 
+    public static function emailQqNumericOnlyVerify($email)
+    {
+        if (!is_string($email)) return true;
+        $parts = explode('@', trim($email), 2);
+        if (count($parts) !== 2 || strtolower($parts[1]) !== 'qq.com') return true;
+        return preg_match('/^\d+$/', $parts[0]) === 1;
+    }
+
     public static function trafficConvert(int $byte)
     {
         $kb = 1024;

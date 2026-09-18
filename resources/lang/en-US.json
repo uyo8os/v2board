@@ -13,6 +13,7 @@
     "Failed to create order": "Failed to create order",
     "Failed to open ticket": "Failed to open ticket",
     "Gmail alias is not supported": "Gmail alias is not supported",
+    "QQ email address is not supported": "This email address is not supported",
     "Incorrect email or password": "Incorrect email or password",
     "Incorrect email verification code": "Incorrect email verification code",
     "Insufficient balance": "Insufficient balance",

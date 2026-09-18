@@ -5814,6 +5814,12 @@
                     defaultValue: _.secure_path,
                     onChange: e=>this.set("safe", "secure_path", e.target.value)
                 })), f.a.createElement(m, {
+                    title: "qq.com\u90ae\u7bb1\u53ea\u5141\u8bb8\u7eaf\u6570\u5b57",
+                    description: "\u5f00\u542f\u540e\uff0c\u4f7f\u7528qq.com\u6ce8\u518c\u65f6\u90ae\u7bb1\u524d\u7f00\u53ea\u5141\u8bb8\u7eaf\u6570\u5b57\u3002"
+                }, f.a.createElement(l["a"], {
+                    checked: parseInt(_.email_qq_numeric_only),
+                    onChange: e=>this.set("safe", "email_qq_numeric_only", e ? 1 : 0)
+                })), f.a.createElement(m, {
                     title: "\u90ae\u7bb1\u540e\u7f00\u767d\u540d\u5355",
                     description: "\u5f00\u542f\u540e\u5728\u540d\u5355\u4e2d\u7684\u90ae\u7bb1\u540e\u7f00\u624d\u5141\u8bb8\u8fdb\u884c\u6ce8\u518c\u3002"
                 }, f.a.createElement(l["a"], {

@@ -31,6 +31,11 @@ class AuthController extends Controller
                 ]));
             }
         }
+        if ((int)config('v2board.email_qq_numeric_only', 0)
+            && !Helper::emailQqNumericOnlyVerify($request->input('email'))
+        ) {
+            abort(500, __('QQ email address is not supported'));
+        }
         if ((int)config('v2board.recaptcha_enable', 0)) {
             $captchaCode = $request->input('recaptcha_data');
             $captchaKey = $request->input('captcha_key'); // 支持跨域场景的 key

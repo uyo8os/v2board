@@ -37,6 +37,15 @@ class CommController extends Controller
         }
         RateLimiter::hit($ip, 60);
 
+        $email = $request->input('email');
+        $isforget = $request->input('isforget');
+        if ((int)$isforget === 0
+            && (int)config('v2board.email_qq_numeric_only', 0)
+            && !Helper::emailQqNumericOnlyVerify($email)
+        ) {
+            abort(500, __('QQ email address is not supported'));
+        }
+
         if ((int)config('v2board.recaptcha_enable', 0)) {
             $captchaCode = $request->input('recaptcha_data');
             $captchaKey = $request->input('captcha_key'); // 支持跨域场景的 key
@@ -45,9 +54,7 @@ class CommController extends Controller
                 abort(500, __('Invalid code is incorrect'));
             }
         }
-        $email = $request->input('email');
         $cacheKeyEmail = strtolower(trim((string)$email));
-        $isforget = $request->input('isforget');
         $email_exists = User::where('email', $email)->exists();
         //检查是否在白名单内
         if ((int)config('v2board.email_whitelist_enable', 0)) {
