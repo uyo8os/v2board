@@ -6046,7 +6046,7 @@
                 })), parseInt(e.ticket.ticket_image_upload_enable) ? f.a.createElement(f.a.Fragment, null, f.a.createElement(m, {
                     isChildren: !0,
                     title: "\u56fe\u5e8a API URL\uff08api_url\uff09",
-                    description: "\u56fe\u5e8a\u63a5\u53e3\u5730\u5740\uff0c\u63a5\u6536 multipart \u5b57\u6bb5 file\u3002"
+                    description: "\u56fe\u5e8a\u63a5\u53e3\u5730\u5740\uff0cEasyImages 2.0 \u63a5\u6536 multipart \u5b57\u6bb5 image\uff0c\u5e76\u4ee5\u8868\u5355\u5b57\u6bb5 token \u4f20\u9001\u3002"
                 }, f.a.createElement("input", {
                     type: "url",
                     className: "form-control",
@@ -6056,7 +6056,7 @@
                 })), f.a.createElement(m, {
                     isChildren: !0,
                     title: "\u56fe\u5e8a Token\uff08token\uff09",
-                    description: "\u53ef\u9009\uff0c\u8bf7\u586b\u5199\u56fe\u5e8a\u63a5\u53e3\u6240\u9700\u7684 token\uff0c\u540e\u7aef\u4f1a\u4ee5 Bearer \u65b9\u5f0f\u53d1\u9001\u3002"
+                    description: "\u8bf7\u586b\u5199 EasyImages 2.0 \u6240\u9700\u7684 token\uff0c\u540e\u7aef\u4f1a\u4ee5\u8868\u5355\u5b57\u6bb5\u4f20\u9001\uff0c\u4e0d\u4f7f\u7528 Bearer Header\u3002"
                 }, f.a.createElement("input", {
                     type: "password",
                     className: "form-control",

@@ -155,9 +155,6 @@ class TicketController extends Controller
         }
         $headers = ['Accept' => 'application/json'];
         $token = trim((string)config('v2board.ticket_image_upload_token', ''));
-        if ($token !== '') {
-            $headers['Authorization'] = preg_match('/^Bearer\\s/i', $token) ? $token : 'Bearer ' . $token;
-        }
 
         $stream = fopen($realPath, 'rb');
         if ($stream === false) {
@@ -167,8 +164,10 @@ class TicketController extends Controller
         try {
             $response = Http::timeout(30)
                 ->withHeaders($headers)
-                ->attach('file', $stream, $file->getClientOriginalName(), ['Content-Type' => $mimeType])
-                ->post($apiUrl);
+                ->attach('image', $stream, $file->getClientOriginalName(), ['Content-Type' => $mimeType])
+                ->post($apiUrl, [
+                    'token' => $token,
+                ]);
         } finally {
             fclose($stream);
         }
@@ -178,8 +177,15 @@ class TicketController extends Controller
         }
 
         $payload = $response->json();
+        if (!is_array($payload)) {
+            abort(502, '图床返回了无法解析的响应');
+        }
+        if (($payload['result'] ?? null) !== 'success') {
+            $message = data_get($payload, 'message');
+            abort(502, '图床上传失败：' . (is_string($message) && trim($message) !== '' ? trim($message) : '图床未接受图片'));
+        }
         $responseField = trim((string)config('v2board.ticket_image_upload_response_field', 'url')) ?: 'url';
-        $url = is_array($payload) ? data_get($payload, $responseField) : null;
+        $url = data_get($payload, $responseField);
         if (!is_string($url) || !filter_var($url, FILTER_VALIDATE_URL)) {
             abort(502, '图床响应中未找到有效图片地址');
         }
