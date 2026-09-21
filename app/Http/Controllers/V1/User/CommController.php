@@ -27,7 +27,8 @@ class CommController extends Controller
                 'commission_distribution_l3' => config('v2board.commission_distribution_l3'),
                 'ticket_image_upload_enable' => (int)config('v2board.ticket_image_upload_enable', 0),
                 'ticket_image_upload_max_file_size' => (int)config('v2board.ticket_image_upload_max_file_size', 5242880),
-                'ticket_image_upload_allowed_types' => $this->getTicketImageUploadAllowedTypes()
+                'ticket_image_upload_allowed_types' => $this->getTicketImageUploadAllowedTypes(),
+                'show_active_sessions' => (int)config('v2board.show_active_sessions', 0)
             ]
         ]);
     }

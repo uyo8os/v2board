@@ -5894,7 +5894,13 @@
                     placeholder: "\u8bf7\u8f93\u5165",
                     defaultValue: _.password_limit_expire,
                     onChange: e=>this.set("safe", "password_limit_expire", e.target.value)
-                }))) : "")), f.a.createElement(s["a"].TabPane, {
+                }))) : "", f.a.createElement(m, {
+                    title: "\u524d\u7aef\u767b\u5f55\u8bbe\u5907\u663e\u793a",
+                    description: "\u5f00\u542f\u540e\u5c06\u5728\u7528\u6237\u524d\u7aef\u663e\u793a\u767b\u5f55\u8bbe\u5907\u8bb0\u5f55\u3002"
+                }, f.a.createElement(l["a"], {
+                    checked: parseInt(_.show_active_sessions),
+                    onChange: e=>this.set("safe", "show_active_sessions", e ? 1 : 0)
+                })))), f.a.createElement(s["a"].TabPane, {
                     tab: "\u8ba2\u9605",
                     key: "subscribe"
                 }, f.a.createElement("div", {
