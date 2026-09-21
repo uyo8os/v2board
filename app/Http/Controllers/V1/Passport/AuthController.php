@@ -181,6 +181,9 @@ class AuthController extends Controller
             abort(500, __('Your account has been suspended'));
         }
 
+        $user->last_login_at = time();
+        $user->save();
+
         $authService = new AuthService($user);
         return response([
             'data' => $authService->generateAuthData($request)
@@ -213,6 +216,8 @@ class AuthController extends Controller
                 abort(500, __('Your account has been suspended'));
             }
             Cache::forget($key);
+            $user->last_login_at = time();
+            $user->save();
             $authService = new AuthService($user);
             return response([
                 'data' => $authService->generateAuthData($request)
