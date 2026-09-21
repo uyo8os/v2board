@@ -110,9 +110,32 @@ class TicketController extends Controller
             abort(403, '工单图片上传未开启');
         }
 
-        $file = $request->file('file');
-        if (!$file || !$file->isValid()) {
-            abort(422, '请选择有效的图片文件');
+        // Some PHP-FPM/proxy combinations preserve the uploaded temporary file
+        // but make Symfony's is_uploaded_file() check return false. Validate the
+        // upload error and readable temporary path instead so those valid files
+        // can still be forwarded to the configured image host.
+        $file = $request->file('file') ?: $request->file('image');
+        if (!$file) {
+            abort(422, '未接收到图片文件，请重新选择后上传');
+        }
+
+        $uploadError = (int)$file->getError();
+        if ($uploadError !== UPLOAD_ERR_OK) {
+            $uploadErrorMessages = [
+                UPLOAD_ERR_INI_SIZE => '图片超过服务器允许的上传大小，请调大 upload_max_filesize 和 post_max_size',
+                UPLOAD_ERR_FORM_SIZE => '图片超过服务器允许的上传大小',
+                UPLOAD_ERR_PARTIAL => '图片上传未完成，请重试',
+                UPLOAD_ERR_NO_FILE => '未接收到图片文件，请重新选择后上传',
+                UPLOAD_ERR_NO_TMP_DIR => '服务器缺少上传临时目录',
+                UPLOAD_ERR_CANT_WRITE => '服务器无法写入上传临时文件',
+                UPLOAD_ERR_EXTENSION => '服务器扩展中止了图片上传',
+            ];
+            abort(422, $uploadErrorMessages[$uploadError] ?? '请选择有效的图片文件');
+        }
+
+        $realPath = $file->getRealPath() ?: $file->getPathname();
+        if (!$realPath || !is_file($realPath) || !is_readable($realPath)) {
+            abort(422, '无法读取图片文件，请重试');
         }
 
         $maxFileSize = max(1, (int)config('v2board.ticket_image_upload_max_file_size', 5242880));
@@ -130,11 +153,6 @@ class TicketController extends Controller
         if ($apiUrl === '') {
             abort(500, '图床上传地址未配置');
         }
-        $realPath = $file->getRealPath();
-        if (!$realPath) {
-            abort(422, '无法读取图片文件');
-        }
-
         $headers = ['Accept' => 'application/json'];
         $token = trim((string)config('v2board.ticket_image_upload_token', ''));
         if ($token !== '') {
