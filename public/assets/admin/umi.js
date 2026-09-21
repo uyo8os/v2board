@@ -6037,7 +6037,64 @@
                    f.a.createElement("option", {
                     value: 2
                 }, "\u5b8c\u5168\u7981\u6b62\u5de5\u5355")
-                )))), f.a.createElement(s["a"].TabPane, {
+                )), f.a.createElement(m, {
+                    title: "\u5f00\u542f\u5de5\u5355\u56fe\u7247\u4e0a\u4f20",
+                    description: "\u5f00\u542f\u540e\uff0c\u7528\u6237\u53ef\u5728\u65b0\u5efa\u5de5\u5355\u65f6\u4e0a\u4f20\u56fe\u7247\uff0c\u56fe\u7247\u4f1a\u7ecf\u540e\u7aef\u4ee3\u7406\u8f6c\u53d1\u5230\u56fe\u5e8a\u3002"
+                }, f.a.createElement(l["a"], {
+                    checked: parseInt(e.ticket.ticket_image_upload_enable),
+                    onChange: e=>this.set("ticket", "ticket_image_upload_enable", e ? 1 : 0)
+                })), parseInt(e.ticket.ticket_image_upload_enable) ? f.a.createElement(f.a.Fragment, null, f.a.createElement(m, {
+                    isChildren: !0,
+                    title: "\u56fe\u5e8a API URL\uff08api_url\uff09",
+                    description: "\u56fe\u5e8a\u63a5\u53e3\u5730\u5740\uff0c\u63a5\u6536 multipart \u5b57\u6bb5 file\u3002"
+                }, f.a.createElement("input", {
+                    type: "url",
+                    className: "form-control",
+                    placeholder: "https://example.com/upload",
+                    value: e.ticket.ticket_image_upload_api_url || "",
+                    onChange: e=>this.set("ticket", "ticket_image_upload_api_url", e.target.value)
+                })), f.a.createElement(m, {
+                    isChildren: !0,
+                    title: "\u56fe\u5e8a Token\uff08token\uff09",
+                    description: "\u53ef\u9009\uff0c\u8bf7\u586b\u5199\u56fe\u5e8a\u63a5\u53e3\u6240\u9700\u7684 token\uff0c\u540e\u7aef\u4f1a\u4ee5 Bearer \u65b9\u5f0f\u53d1\u9001\u3002"
+                }, f.a.createElement("input", {
+                    type: "password",
+                    className: "form-control",
+                    placeholder: "\u53ef\u9009",
+                    value: e.ticket.ticket_image_upload_token || "",
+                    onChange: e=>this.set("ticket", "ticket_image_upload_token", e.target.value)
+                })), f.a.createElement(m, {
+                    isChildren: !0,
+                    title: "\u6700\u5927\u6587\u4ef6\u5927\u5c0f\uff08max_file_size\uff0c\u5b57\u8282\uff09",
+                    description: "\u5355\u4e2a\u6587\u4ef6\u7684\u5927\u5c0f\u4e0a\u9650\uff0c\u9ed8\u8ba4 5242880\u3002"
+                }, f.a.createElement("input", {
+                    type: "number",
+                    min: 1,
+                    className: "form-control",
+                    placeholder: "5242880",
+                    value: e.ticket.ticket_image_upload_max_file_size || 5242880,
+                    onChange: e=>this.set("ticket", "ticket_image_upload_max_file_size", parseInt(e.target.value) || 0)
+                })), f.a.createElement(m, {
+                    isChildren: !0,
+                    title: "\u5141\u8bb8\u7684\u6587\u4ef6\u7c7b\u578b\uff08allowed_types\uff09",
+                    description: "\u8bf7\u4f7f\u7528\u9017\u53f7\u5206\u9694 MIME \u7c7b\u578b\uff0c\u4f8b\u5982 image/jpeg,image/png,image/gif,image/webp\u3002"
+                }, f.a.createElement("textarea", {
+                    rows: "2",
+                    className: "form-control",
+                    placeholder: "image/jpeg,image/png,image/gif,image/webp",
+                    value: (e.ticket.ticket_image_upload_allowed_types || []).join(","),
+                    onChange: e=>this.set("ticket", "ticket_image_upload_allowed_types", e.target.value.split(",").map(e=>e.trim()).filter(Boolean))
+                })), f.a.createElement(m, {
+                    isChildren: !0,
+                    title: "\u54cd\u5e94\u5b57\u6bb5\uff08response_field\uff09",
+                    description: "\u56fe\u5e8a\u8fd4\u56de JSON \u4e2d\u56fe\u7247 URL \u6240\u5728\u7684\u5b57\u6bb5\uff0c\u652f\u6301 data.url \u8fd9\u7c7b\u8def\u5f84\u3002"
+                }, f.a.createElement("input", {
+                    type: "text",
+                    className: "form-control",
+                    placeholder: "url",
+                    value: e.ticket.ticket_image_upload_response_field || "url",
+                    onChange: e=>this.set("ticket", "ticket_image_upload_response_field", e.target.value)
+                }))) : null)), f.a.createElement(s["a"].TabPane, {
                     tab: "\u9080\u8bf7&\u4f63\u91d1",
                     key: "invite"
                 }, f.a.createElement("div", {

@@ -14,6 +14,13 @@ class ConfigSave extends FormRequest
         ],
         // invite & commission
         'ticket_status' => 'in:0,1,2',
+        'ticket_image_upload_enable' => 'in:0,1',
+        'ticket_image_upload_api_url' => 'nullable|url',
+        'ticket_image_upload_token' => 'nullable|string',
+        'ticket_image_upload_max_file_size' => 'nullable|integer|min:1',
+        'ticket_image_upload_allowed_types' => 'nullable|array',
+        'ticket_image_upload_allowed_types.*' => 'string',
+        'ticket_image_upload_response_field' => 'nullable|string|regex:/^[A-Za-z0-9_.-]+$/',
         'invite_force' => 'in:0,1',
         'invite_commission' => 'integer',
         'invite_gen_limit' => 'integer',

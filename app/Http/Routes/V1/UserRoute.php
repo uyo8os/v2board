@@ -46,6 +46,7 @@ class UserRoute
             $router->post('/ticket/reply', 'V1\\User\\TicketController@reply');
             $router->post('/ticket/close', 'V1\\User\\TicketController@close');
             $router->post('/ticket/save', 'V1\\User\\TicketController@save');
+            $router->post('/ticket/upload', 'V1\\User\\TicketController@upload');
             $router->get ('/ticket/fetch', 'V1\\User\\TicketController@fetch');
             $router->post('/ticket/withdraw', 'V1\\User\\TicketController@withdraw');
             // Server

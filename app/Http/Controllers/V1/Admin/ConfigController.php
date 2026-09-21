@@ -76,7 +76,13 @@ class ConfigController extends Controller
         $key = $request->input('key');
         $data = [
             'ticket' => [
-                'ticket_status' => config('v2board.ticket_status', 0)
+                'ticket_status' => config('v2board.ticket_status', 0),
+                'ticket_image_upload_enable' => (int)config('v2board.ticket_image_upload_enable', 0),
+                'ticket_image_upload_api_url' => config('v2board.ticket_image_upload_api_url'),
+                'ticket_image_upload_token' => config('v2board.ticket_image_upload_token'),
+                'ticket_image_upload_max_file_size' => (int)config('v2board.ticket_image_upload_max_file_size', 5242880),
+                'ticket_image_upload_allowed_types' => $this->getTicketImageUploadAllowedTypes(),
+                'ticket_image_upload_response_field' => config('v2board.ticket_image_upload_response_field', 'url')
             ],
             'deposit' => [
                 'deposit_bounus' => config('v2board.deposit_bounus', [])
@@ -194,6 +200,27 @@ class ConfigController extends Controller
         return response([
             'data' => $data
         ]);
+    }
+
+    private function getTicketImageUploadAllowedTypes()
+    {
+        $default = [
+            'image/jpeg',
+            'image/png',
+            'image/gif',
+            'image/webp'
+        ];
+        $types = config('v2board.ticket_image_upload_allowed_types', $default);
+        if (is_array($types)) {
+            $types = array_values(array_filter(array_map(function ($type) {
+                return strtolower(trim((string)$type));
+            }, $types)));
+            return $types ?: $default;
+        }
+        $types = array_values(array_filter(array_map(function ($type) {
+            return strtolower(trim((string)$type));
+        }, preg_split('/,/', (string)$types))));
+        return $types ?: $default;
     }
 
     public function save(ConfigSave $request)

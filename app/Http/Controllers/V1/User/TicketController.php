@@ -16,6 +16,7 @@ use App\Models\TicketMessage;
 use App\Utils\Dict;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 
 class TicketController extends Controller
 {
@@ -103,6 +104,76 @@ class TicketController extends Controller
         }
     }
 
+    public function upload(Request $request)
+    {
+        if (!(int)config('v2board.ticket_image_upload_enable', 0)) {
+            abort(403, '工单图片上传未开启');
+        }
+
+        $file = $request->file('file');
+        if (!$file || !$file->isValid()) {
+            abort(422, '请选择有效的图片文件');
+        }
+
+        $maxFileSize = max(1, (int)config('v2board.ticket_image_upload_max_file_size', 5242880));
+        if ((int)$file->getSize() > $maxFileSize) {
+            abort(422, '图片大小不能超过 ' . $maxFileSize . ' 字节');
+        }
+
+        $allowedTypes = $this->getTicketImageUploadAllowedTypes();
+        $mimeType = strtolower((string)($file->getMimeType() ?: $file->getClientMimeType()));
+        if ($allowedTypes && !in_array($mimeType, $allowedTypes, true)) {
+            abort(422, '不支持的图片类型');
+        }
+
+        $apiUrl = trim((string)config('v2board.ticket_image_upload_api_url', ''));
+        if ($apiUrl === '') {
+            abort(500, '图床上传地址未配置');
+        }
+        $realPath = $file->getRealPath();
+        if (!$realPath) {
+            abort(422, '无法读取图片文件');
+        }
+
+        $headers = ['Accept' => 'application/json'];
+        $token = trim((string)config('v2board.ticket_image_upload_token', ''));
+        if ($token !== '') {
+            $headers['Authorization'] = preg_match('/^Bearer\\s/i', $token) ? $token : 'Bearer ' . $token;
+        }
+
+        $stream = fopen($realPath, 'rb');
+        if ($stream === false) {
+            abort(422, '无法读取图片文件');
+        }
+
+        try {
+            $response = Http::timeout(30)
+                ->withHeaders($headers)
+                ->attach('file', $stream, $file->getClientOriginalName(), ['Content-Type' => $mimeType])
+                ->post($apiUrl);
+        } finally {
+            fclose($stream);
+        }
+
+        if (!$response->successful()) {
+            abort(502, '图床上传失败，请稍后重试');
+        }
+
+        $payload = $response->json();
+        $responseField = trim((string)config('v2board.ticket_image_upload_response_field', 'url')) ?: 'url';
+        $url = is_array($payload) ? data_get($payload, $responseField) : null;
+        if (!is_string($url) || !filter_var($url, FILTER_VALIDATE_URL)) {
+            abort(502, '图床响应中未找到有效图片地址');
+        }
+
+        return response([
+            'data' => [
+                'url' => $url,
+                'name' => $file->getClientOriginalName()
+            ]
+        ]);
+    }
+
     public function reply(Request $request)
     {
         if (empty($request->input('id'))) {
@@ -165,6 +236,27 @@ class TicketController extends Controller
         return TicketMessage::where('ticket_id', $ticketId)
             ->orderBy('id', 'DESC')
             ->first();
+    }
+
+    private function getTicketImageUploadAllowedTypes()
+    {
+        $default = [
+            'image/jpeg',
+            'image/png',
+            'image/gif',
+            'image/webp'
+        ];
+        $types = config('v2board.ticket_image_upload_allowed_types', $default);
+        if (is_array($types)) {
+            $types = array_values(array_filter(array_map(function ($type) {
+                return strtolower(trim((string)$type));
+            }, $types)));
+            return $types ?: $default;
+        }
+        $types = array_values(array_filter(array_map(function ($type) {
+            return strtolower(trim((string)$type));
+        }, preg_split('/,/', (string)$types))));
+        return $types ?: $default;
     }
 
     public function withdraw(TicketWithdraw $request)

@@ -24,9 +24,33 @@ class CommController extends Controller
                 'commission_distribution_enable' => (int)config('v2board.commission_distribution_enable', 0),
                 'commission_distribution_l1' => config('v2board.commission_distribution_l1'),
                 'commission_distribution_l2' => config('v2board.commission_distribution_l2'),
-                'commission_distribution_l3' => config('v2board.commission_distribution_l3')
+                'commission_distribution_l3' => config('v2board.commission_distribution_l3'),
+                'ticket_image_upload_enable' => (int)config('v2board.ticket_image_upload_enable', 0),
+                'ticket_image_upload_max_file_size' => (int)config('v2board.ticket_image_upload_max_file_size', 5242880),
+                'ticket_image_upload_allowed_types' => $this->getTicketImageUploadAllowedTypes()
             ]
         ]);
+    }
+
+    private function getTicketImageUploadAllowedTypes()
+    {
+        $default = [
+            'image/jpeg',
+            'image/png',
+            'image/gif',
+            'image/webp'
+        ];
+        $types = config('v2board.ticket_image_upload_allowed_types', $default);
+        if (is_array($types)) {
+            $types = array_values(array_filter(array_map(function ($type) {
+                return strtolower(trim((string)$type));
+            }, $types)));
+            return $types ?: $default;
+        }
+        $types = array_values(array_filter(array_map(function ($type) {
+            return strtolower(trim((string)$type));
+        }, preg_split('/,/', (string)$types))));
+        return $types ?: $default;
     }
 
     public function getStripePublicKey(Request $request)
