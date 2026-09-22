@@ -148,14 +148,6 @@ class AuthController extends Controller
         $email = $request->input('email');
         $password = $request->input('password');
 
-        if ((int)config('v2board.login_captcha_enable', 0)) {
-            $captchaCode = $request->input('recaptcha_data');
-            $captchaKey = $request->input('captcha_key');
-            if (!LocalCaptchaService::verify($request, $captchaCode, $captchaKey)) {
-                abort(500, __('Invalid code is incorrect'));
-            }
-        }
-
         if ((int)config('v2board.password_limit_enable', 1)) {
             $passwordErrorCount = (int)Cache::get(CacheKey::get('PASSWORD_ERROR_LIMIT', $email), 0);
             if ($passwordErrorCount >= (int)config('v2board.password_limit_count', 5)) {
@@ -166,6 +158,17 @@ class AuthController extends Controller
         }
 
         $user = User::where('email', $email)->first();
+        $loginCaptchaEnabled = (int)config('v2board.login_captcha_enable', 0)
+            && (!$user || !(int)$user->is_admin);
+
+        if ($loginCaptchaEnabled) {
+            $captchaCode = $request->input('recaptcha_data');
+            $captchaKey = $request->input('captcha_key');
+            if (!LocalCaptchaService::verify($request, $captchaCode, $captchaKey)) {
+                abort(500, __('Invalid code is incorrect'));
+            }
+        }
+
         if (!$user) {
             abort(500, __('Incorrect email or password'));
         }
