@@ -5843,6 +5843,12 @@
                     checked: parseInt(_.recaptcha_enable),
                     onChange: e=>this.set("safe", "recaptcha_enable", e ? 1 : 0)
                 })), f.a.createElement(m, {
+                    title: "\u767b\u5f55\u4eba\u673a\u9a8c\u8bc1",
+                    description: "\u5f00\u542f\u540e\u767b\u5f55\u65f6\u4f7f\u7528\u672c\u5730\u56fe\u7247CAPTCHA\u9632\u6b62\u673a\u5668\u4eba\u3002"
+                }, f.a.createElement(l["a"], {
+                    checked: parseInt(_.login_captcha_enable),
+                    onChange: e=>this.set("safe", "login_captcha_enable", e ? 1 : 0)
+                })), f.a.createElement(m, {
                     title: "IP\u6ce8\u518c\u9650\u5236",
                     description: "\u5f00\u542f\u540e\u5982\u679cIP\u6ce8\u518c\u8d26\u6237\u8fbe\u5230\u89c4\u5219\u8981\u6c42\u5c06\u4f1a\u88ab\u9650\u5236\u6ce8\u518c\uff0c\u8bf7\u6ce8\u610fIP\u5224\u65ad\u53ef\u80fd\u56e0\u4e3aCDN\u6216\u524d\u7f6e\u4ee3\u7406\u5bfc\u81f4\u95ee\u9898\u3002"
                 }, f.a.createElement(l["a"], {

@@ -15,7 +15,9 @@ class AuthLogin extends FormRequest
     {
         return [
             'email' => 'required|email:strict',
-            'password' => 'required|min:8'
+            'password' => 'required|min:8',
+            'recaptcha_data' => 'nullable|string|max:64',
+            'captcha_key' => 'nullable|string|max:128',
         ];
     }
 

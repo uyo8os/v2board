@@ -109,6 +109,7 @@ class ConfigSave extends FormRequest
         'email_whitelist_suffix' => 'nullable|array',
         'email_gmail_limit_enable' => 'in:0,1',
         'recaptcha_enable' => 'in:0,1',
+        'login_captcha_enable' => 'in:0,1',
         'recaptcha_key' => '',
         'recaptcha_site_key' => '',
         'email_verify' => 'in:0,1',
