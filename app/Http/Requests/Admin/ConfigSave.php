@@ -8,6 +8,11 @@ class ConfigSave extends FormRequest
 {
     const RULES = [
         // deposit
+        'deposit_enable' => 'in:0,1',
+        'deposit_preset_amounts' => [
+            'nullable',
+            'array',
+        ],
         'deposit_bounus' => [
             'nullable',
             'array',
@@ -125,6 +130,17 @@ class ConfigSave extends FormRequest
     public function rules()
     {
         $rules = self::RULES;
+        $rules['deposit_preset_amounts'][] = function ($attribute, $value, $fail) {
+            foreach ($value as $amount) {
+                if ($amount === '') {
+                    continue;
+                }
+                $amount = trim((string)$amount);
+                if (!preg_match('/^\d+(\.\d{1,2})?$/', $amount) || (float)$amount < 1 || round((float)$amount, 2) >= 99999.99) {
+                    $fail('充值预设金额格式不正确，金额需在1元至99999.99元之间');
+                }
+            }
+        };
 
         $rules['deposit_bounus'][] = function ($attribute, $value, $fail) {
             foreach ($value as $tier) {
@@ -137,6 +153,18 @@ class ConfigSave extends FormRequest
             }
         };
         return $rules;
+    }
+
+    protected function prepareForValidation()
+    {
+        $amounts = $this->input('deposit_preset_amounts');
+        if (is_string($amounts)) {
+            $this->merge([
+                'deposit_preset_amounts' => array_values(array_filter(array_map('trim', explode(',', $amounts)), function ($amount) {
+                    return $amount !== '';
+                }))
+            ]);
+        }
     }
 
     public function messages()

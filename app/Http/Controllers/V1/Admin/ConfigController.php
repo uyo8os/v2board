@@ -85,6 +85,8 @@ class ConfigController extends Controller
                 'ticket_image_upload_response_field' => config('v2board.ticket_image_upload_response_field', 'url')
             ],
             'deposit' => [
+                'deposit_enable' => (int)config('v2board.deposit_enable', 1),
+                'deposit_preset_amounts' => $this->getDepositPresetAmounts(),
                 'deposit_bounus' => config('v2board.deposit_bounus', [])
             ],
             'invite' => [
@@ -222,6 +224,30 @@ class ConfigController extends Controller
             return strtolower(trim((string)$type));
         }, preg_split('/,/', (string)$types))));
         return $types ?: $default;
+    }
+
+    private function getDepositPresetAmounts()
+    {
+        $amounts = config('v2board.deposit_preset_amounts', []);
+        if (is_string($amounts)) {
+            $amounts = preg_split('/,/', $amounts);
+        }
+        if (!is_array($amounts)) {
+            return [];
+        }
+        $result = [];
+        foreach ($amounts as $amount) {
+            $amount = trim((string)$amount);
+            if ($amount === '' || !is_numeric($amount)) {
+                continue;
+            }
+            $amount = round((float)$amount, 2);
+            if ($amount < 1 || $amount >= 99999.99 || in_array($amount, $result, true)) {
+                continue;
+            }
+            $result[] = $amount;
+        }
+        return $result;
     }
 
     public function save(ConfigSave $request)

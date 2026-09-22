@@ -81,6 +81,9 @@ class OrderController extends Controller
             abort(500, __('You have an unpaid or pending order, please try again later or cancel it'));
         }
         if ($request->input('plan_id') == 0) {
+            if (!(int)config('v2board.deposit_enable', 1)) {
+                abort(500, '账户充值功能已关闭');
+            }
             $amount = $request->input('deposit_amount');
             if ($amount <= 0) {
                 abort(500, __('Failed to create order, deposit amount must be greater than 0'));

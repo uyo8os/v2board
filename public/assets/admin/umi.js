@@ -6013,6 +6013,22 @@
                 }, f.a.createElement("div", {
                     className: ""
                 }, f.a.createElement(m, {
+                    title: "\u5145\u503c\u5f00\u5173",
+                    description: "\u5173\u95ed\u540e\u7528\u6237\u524d\u7aef\u5c06\u7981\u7528\u8d26\u6237\u5145\u503c\u9875\u9762\u3002"
+                }, f.a.createElement(l["a"], {
+                    checked: parseInt(null == e.deposit.deposit_enable ? 1 : e.deposit.deposit_enable),
+                    onChange: e=>this.set("deposit", "deposit_enable", e ? 1 : 0)
+                })), f.a.createElement(m, {
+                    isChildren: !0,
+                    title: "\u5145\u503c\u9884\u8bbe\u91d1\u989d",
+                    description: "\u4f7f\u7528\u9017\u53f7\u5206\u5272\u91d1\u989d\uff0c\u5355\u4f4d\u4e3a\u5143\uff1b\u8bbe\u7f6e\u540e\u5c06\u5728\u7528\u6237\u7aef\u663e\u793a\uff0c\u4e0d\u8bbe\u7f6e\u5219\u4e0d\u663e\u793a\u3002"
+                }, f.a.createElement("input", {
+                    type: "text",
+                    className: "form-control",
+                    placeholder: "\u5982 10,100",
+                    value: Array.isArray(e.deposit.deposit_preset_amounts) ? e.deposit.deposit_preset_amounts.join(",") : e.deposit.deposit_preset_amounts || "",
+                    onChange: e=>this.set("deposit", "deposit_preset_amounts", e.target.value.split(","))
+                })), f.a.createElement(m, {
                     title: "\u5145\u503c\u5956\u52b1",
                     description: "\u5145\u503c\u4e00\u5b9a\u91d1\u989d\u53ef\u4ee5\u83b7\u5f97\u7684\u5956\u52b1\u3002"
                 }, f.a.createElement("textarea", {
@@ -16906,6 +16922,7 @@
                                     return "string" === typeof (null === (t = o.data.invite) || void 0 === t ? void 0 : t.commission_withdraw_method) && (o.data.invite.commission_withdraw_method = o.data.invite.commission_withdraw_method.split(",")),
                                     "string" === typeof (null === (i = o.data.site) || void 0 === i ? void 0 : i.email_whitelist_suffix) && (o.data.site.email_whitelist_suffix = o.data.site.email_whitelist_suffix.split(",")),
                                     "string" === typeof (null === (j = o.data.deposit) || void 0 === j ? void 0 : j.deposit_bounus) && (o.data.deposit.deposit_bounus = o.data.deposit.deposit_bounus.split(",")),
+                                    "string" === typeof (null === (j = o.data.deposit) || void 0 === j ? void 0 : j.deposit_preset_amounts) && (o.data.deposit.deposit_preset_amounts = o.data.deposit.deposit_preset_amounts.split(",")),
                                     e.next = 13,
                                     r({
                                         type: "setState",
