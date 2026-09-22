@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Utils\ExternalUrlValidator;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ConfigSave extends FormRequest
@@ -20,7 +21,10 @@ class ConfigSave extends FormRequest
         // invite & commission
         'ticket_status' => 'in:0,1,2',
         'ticket_image_upload_enable' => 'in:0,1',
-        'ticket_image_upload_api_url' => 'nullable|url',
+        'ticket_image_upload_api_url' => [
+            'nullable',
+            'url',
+        ],
         'ticket_image_upload_token' => 'nullable|string',
         'ticket_image_upload_max_file_size' => 'nullable|integer|min:1',
         'ticket_image_upload_allowed_types' => 'nullable|array',
@@ -131,6 +135,17 @@ class ConfigSave extends FormRequest
     public function rules()
     {
         $rules = self::RULES;
+        $rules['ticket_image_upload_api_url'][] = function ($attribute, $value, $fail) {
+            if ($value === null || is_array($value) || trim((string)$value) === '') {
+                return;
+            }
+
+            $result = ExternalUrlValidator::inspectImageUploadUrl($value);
+            if (!$result['valid']) {
+                $fail($result['message']);
+            }
+        };
+
         $rules['deposit_preset_amounts'][] = function ($attribute, $value, $fail) {
             foreach ($value as $amount) {
                 if ($amount === '') {
@@ -180,6 +195,7 @@ class ConfigSave extends FormRequest
             'tos_url.url' => '服务条款URL格式不正确，必须携带http(s)://',
             'telegram_discuss_link.url' => 'Telegram群组地址必须为URL格式，必须携带http(s)://',
             'logo.url' => 'LOGO URL格式不正确，必须携带https(s)://',
+            'ticket_image_upload_api_url.url' => '图床上传地址格式不正确，必须使用HTTPS公网域名',
             'secure_path.min' => '后台路径长度最小为8位',
             'secure_path.regex' => '后台路径只能为字母或数字',
         ];

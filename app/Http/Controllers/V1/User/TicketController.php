@@ -14,6 +14,7 @@ use App\Services\TicketService;
 use App\Models\Ticket;
 use App\Models\TicketMessage;
 use App\Utils\Dict;
+use App\Utils\ExternalUrlValidator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -153,6 +154,10 @@ class TicketController extends Controller
         if ($apiUrl === '') {
             abort(500, '图床上传地址未配置');
         }
+        $apiEndpoint = ExternalUrlValidator::inspectImageUploadUrl($apiUrl);
+        if (!$apiEndpoint['valid']) {
+            abort(502, $apiEndpoint['message']);
+        }
         $headers = ['Accept' => 'application/json'];
         $token = trim((string)config('v2board.ticket_image_upload_token', ''));
 
@@ -162,7 +167,17 @@ class TicketController extends Controller
         }
 
         try {
+            $httpOptions = [
+                'allow_redirects' => false,
+                'connect_timeout' => 10,
+            ];
+            if (!defined('CURLOPT_RESOLVE') || empty($apiEndpoint['curl_resolve'])) {
+                abort(502, '服务器不支持安全的图床连接');
+            }
+            $httpOptions['curl'][CURLOPT_RESOLVE] = $apiEndpoint['curl_resolve'];
+
             $response = Http::timeout(30)
+                ->withOptions($httpOptions)
                 ->withHeaders($headers)
                 ->attach('image', $stream, $file->getClientOriginalName(), ['Content-Type' => $mimeType])
                 ->post($apiUrl, [
