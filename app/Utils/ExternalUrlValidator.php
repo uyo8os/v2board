@@ -99,12 +99,15 @@ class ExternalUrlValidator
             return self::invalid('图床域名没有可用的公网地址');
         }
 
+        // One host:port cache entry must contain every validated address.
+        // Separate entries overwrite one another and can leave only an
+        // unreachable IPv6 address on an IPv4-only server. libcurl can then
+        // select and fall back between addresses without resolving DNS again.
+        $resolveIps = [];
         foreach ($result['addresses'] as $ip) {
-            // CURLOPT_RESOLVE keeps the request on the address that was
-            // checked above, reducing DNS-rebinding TOCTOU exposure.
-            $resolveIp = strpos($ip, ':') !== false ? '[' . $ip . ']' : $ip;
-            $result['curl_resolve'][] = $host . ':443:' . $resolveIp;
+            $resolveIps[] = strpos($ip, ':') !== false ? '[' . $ip . ']' : $ip;
         }
+        $result['curl_resolve'] = [$host . ':443:' . implode(',', $resolveIps)];
 
         return $result;
     }
