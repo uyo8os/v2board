@@ -45,10 +45,11 @@ class PaymentService
             $notifyUrl = $this->config['notify_domain'] . $parseUrl['path'];
         }
         $currentBase = $this->currentBase();
+        $returnPath = '/payment?trade_no=' . rawurlencode((string) $order['trade_no']);
         if ($currentBase) { 
-            $returnUrl = $currentBase . '/#/order/' . $order['trade_no'];
+            $returnUrl = $currentBase . $returnPath;
         } else {
-            $returnUrl = url('/#/order/' . $order['trade_no']);
+            $returnUrl = url($returnPath);
         }
         return $this->payment->pay([
             'notify_url' => $notifyUrl,
