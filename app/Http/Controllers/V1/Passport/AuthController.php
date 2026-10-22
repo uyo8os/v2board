@@ -23,6 +23,9 @@ class AuthController extends Controller
 {
     public function register(AuthRegister $request)
     {
+        if ((int)config('v2board.stop_register', 0)) {
+            abort(500, __('Registration has closed'));
+        }
         if ((int)config('v2board.register_limit_by_ip_enable', 0)) {
             $registerCountByIP = Cache::get(CacheKey::get('REGISTER_IP_RATE_LIMIT', $request->ip())) ?? 0;
             if ((int)$registerCountByIP >= (int)config('v2board.register_limit_count', 3)) {
@@ -57,9 +60,6 @@ class AuthController extends Controller
             if (strpos($prefix, '.') !== false || strpos($prefix, '+') !== false) {
                 abort(500, __('Gmail alias is not supported'));
             }
-        }
-        if ((int)config('v2board.stop_register', 0)) {
-            abort(500, __('Registration has closed'));
         }
         if ((int)config('v2board.invite_force', 0)) {
             if (empty($request->input('invite_code'))) {

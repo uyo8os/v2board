@@ -12,6 +12,7 @@ class CommController extends Controller
     {
         return response([
             'data' => [
+                'stop_register' => (int)config('v2board.stop_register', 0) ? 1 : 0,
                 'tos_url' => config('v2board.tos_url'),
                 'is_email_verify' => (int)config('v2board.email_verify', 0) ? 1 : 0,
                 'is_invite_force' => (int)config('v2board.invite_force', 0) ? 1 : 0,
@@ -27,7 +28,7 @@ class CommController extends Controller
                 'app_url' => config('v2board.app_url'),
                 'logo' => config('v2board.logo'),
             ]
-        ]);
+        ])->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
     }
 
     private function getEmailSuffix()

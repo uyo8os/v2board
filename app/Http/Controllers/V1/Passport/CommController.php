@@ -31,6 +31,10 @@ class CommController extends Controller
 
     public function sendEmailVerify(CommSendEmailVerify $request)
     {
+        // Only password recovery remains available while new registration is closed.
+        if (!in_array($request->input('isforget'), [1, '1'], true) && (int)config('v2board.stop_register', 0)) {
+            abort(500, __('Registration has closed'));
+        }
         $ip = $request->ip();
         if (RateLimiter::tooManyAttempts($ip, 3)) {
             abort(429, __('Too many requests, please try again later.'));
