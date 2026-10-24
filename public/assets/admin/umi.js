@@ -82780,6 +82780,7 @@
                 var Rr = n("q1tI");
                 var React = (Rr && Rr.createElement) ? Rr : (Rr.default || Rr);
                 var h = React.createElement;
+                var secondsPerMinute = 60, bytesPerGB = 1073741824;
                 function apiBase() {
                     return (window.settings && window.settings.host) ? window.settings.host : window.location.origin;
                 }
@@ -82792,9 +82793,9 @@
                 function formatBytes(v) {
                     v = parseInt(v) || 0;
                     var kb = 1024, mb = 1048576, gb = 1073741824;
-                    if (v > gb) return (v / gb).toFixed(2) + " GB";
-                    if (v > mb) return (v / mb).toFixed(2) + " MB";
-                    if (v > kb) return (v / kb).toFixed(2) + " KB";
+                    if (v >= gb) return (v / gb).toFixed(2) + " GB";
+                    if (v >= mb) return (v / mb).toFixed(2) + " MB";
+                    if (v >= kb) return (v / kb).toFixed(2) + " KB";
                     return v + " B";
                 }
                 function formatDuration(sec) {
@@ -82850,7 +82851,12 @@
                     openModal(rule) {
                         this.setState({
                             visible: true,
-                            editing: rule ? Object.assign({}, rule) : { name: "", node_ids: [], trigger_period: 7200, threshold: 0, speed_limit: 0, limit_duration: 3600, disconnect_existing_connections: 0 }
+                            // Form values use minutes/GB; the API and stored rules use seconds/bytes.
+                            editing: rule ? Object.assign({}, rule, {
+                                trigger_period: rule.trigger_period / secondsPerMinute,
+                                threshold: rule.threshold / bytesPerGB,
+                                limit_duration: rule.limit_duration / secondsPerMinute
+                            }) : { name: "", node_ids: [], trigger_period: 120, threshold: 0, speed_limit: 0, limit_duration: 60, disconnect_existing_connections: 0 }
                         });
                     }
                     closeModal() {
@@ -82861,12 +82867,17 @@
                         var editing = this.state.editing;
                         if (!editing.name) { window.alert("\u8bf7\u8f93\u5165\u89c4\u5219\u540d\u79f0"); return; }
                         if (!editing.node_ids || editing.node_ids.length === 0) { window.alert("\u8bf7\u9009\u62e9\u81f3\u5c11\u4e00\u4e2a\u8981\u9650\u901f\u7684\u8282\u70b9"); return; }
+                        var params = Object.assign({}, editing, {
+                            trigger_period: Math.round(Number(editing.trigger_period) * secondsPerMinute),
+                            threshold: Math.round(Number(editing.threshold) * bytesPerGB),
+                            limit_duration: Math.round(Number(editing.limit_duration) * secondsPerMinute)
+                        });
                         self.setState({ saveLoading: true });
                         fetch(apiBase() + "/api/v1/" + securePath() + "/server/speedlimit/save", {
                             method: "POST",
                             headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
                             credentials: "include",
-                            body: JSON.stringify(editing)
+                            body: JSON.stringify(params)
                         }).then(function(r) {
                             self.setState({ saveLoading: false });
                             if (r.ok) {
@@ -83017,9 +83028,9 @@
                                                 h("input", { type: "text", className: "form-control", placeholder: "\u8bf7\u8f93\u5165\u89c4\u5219\u540d\u79f0", value: editing.name || "", onChange: function(ev) { self.setField("name", ev.target.value); } })
                                             ),
                                             h("div", { className: "form-group" },
-                                                h("label", null, "\u89e6\u53d1\u65f6\u95f4\uff08\u79d2\uff0c\u4f8b\u5982 7200 = 2\u5c0f\u65f6\uff09"),
+                                                h("label", null, "\u89e6\u53d1\u65f6\u95f4\uff08\u5206\u949f\uff09"),
                                                 h("small", { className: "form-text text-muted", style: { marginTop: 0, marginBottom: "4px" } }, "\u4ece\u8be5\u7528\u6237\u5728\u672c\u89c4\u5219\u4e0b\u9996\u6b21\u4ea7\u751f\u6d41\u91cf\u5f00\u59cb\u8ba1\u65f6\uff0c\u5728\u6b64\u65f6\u95f4\u5185\u6d41\u91cf\u8d85\u51fa\u5219\u89e6\u53d1\u9650\u901f\uff0c\u8fc7\u671f\u672a\u89e6\u53d1\u5219\u91cd\u65b0\u8ba1\u65f6"),
-                                                h("input", { type: "number", className: "form-control", min: 60, placeholder: "\u8bf7\u8f93\u5165\u89e6\u53d1\u65f6\u95f4\u79d2\u6570", value: editing.trigger_period || "", onChange: function(ev) { self.setField("trigger_period", parseInt(ev.target.value) || 0); } })
+                                                h("input", { type: "number", className: "form-control", min: 1, step: "any", placeholder: "\u8bf7\u8f93\u5165\u89e6\u53d1\u65f6\u95f4\uff08\u5206\u949f\uff09", value: editing.trigger_period || "", onChange: function(ev) { self.setField("trigger_period", ev.target.value); } })
                                             ),
                                             h("div", { className: "form-group" },
                                                 h("label", null, "\u9009\u62e9\u8981\u9650\u901f\u7684\u8282\u70b9"),
@@ -83033,17 +83044,17 @@
                                                 )
                                             ),
                                             h("div", { className: "form-group" },
-                                                h("label", null, "\u6d41\u91cf\u8d85\u51fa\uff08\u5b57\u8282\uff0c\u4f8b\u5982 107374182400 = 100GB\uff09"),
-                                                h("input", { type: "number", className: "form-control", min: 1, placeholder: "\u8bf7\u8f93\u5165\u89e6\u53d1\u9608\u503c\uff08\u5b57\u8282\uff09", value: editing.threshold || "", onChange: function(ev) { self.setField("threshold", parseInt(ev.target.value) || 0); } })
+                                                h("label", null, "\u6d41\u91cf\u8d85\u51fa\uff08GB\uff09"),
+                                                h("input", { type: "number", className: "form-control", min: 0, step: "any", placeholder: "\u8bf7\u8f93\u5165\u89e6\u53d1\u9608\u503c\uff08GB\uff09", value: editing.threshold || "", onChange: function(ev) { self.setField("threshold", ev.target.value); } })
                                             ),
                                             h("div", { className: "form-group" },
                                                 h("label", null, "\u89e6\u53d1\u540e\u9650\u901f\uff08Mbps\uff09"),
                                                 h("input", { type: "number", className: "form-control", min: 1, placeholder: "\u8bf7\u8f93\u5165\u9650\u901f\u503c", value: editing.speed_limit || "", onChange: function(ev) { self.setField("speed_limit", parseInt(ev.target.value) || 0); } })
                                             ),
                                             h("div", { className: "form-group" },
-                                                h("label", null, "\u9650\u901f\u65f6\u957f\uff08\u79d2\uff0c\u4f8b\u5982 3600 = 1\u5c0f\u65f6\uff09"),
+                                                h("label", null, "\u9650\u901f\u65f6\u957f\uff08\u5206\u949f\uff09"),
                                                 h("small", { className: "form-text text-muted", style: { marginTop: 0, marginBottom: "4px" } }, "\u89e6\u53d1\u9650\u901f\u540e\u7ecf\u8fc7\u8be5\u65f6\u957f\u81ea\u52a8\u89e3\u9664\uff0c\u89e3\u9664\u540e\u5f00\u59cb\u4e0b\u4e2a\u5468\u671f"),
-                                                h("input", { type: "number", className: "form-control", min: 60, placeholder: "\u8bf7\u8f93\u5165\u9650\u901f\u65f6\u957f\u79d2\u6570", value: editing.limit_duration || "", onChange: function(ev) { self.setField("limit_duration", parseInt(ev.target.value) || 0); } })
+                                                h("input", { type: "number", className: "form-control", min: 1, step: "any", placeholder: "\u8bf7\u8f93\u5165\u9650\u901f\u65f6\u957f\uff08\u5206\u949f\uff09", value: editing.limit_duration || "", onChange: function(ev) { self.setField("limit_duration", ev.target.value); } })
                                             ),
                                             h("div", { className: "form-group" },
                                                 h("label", { className: "form-check", style: { position: "relative", display: "block" } },
