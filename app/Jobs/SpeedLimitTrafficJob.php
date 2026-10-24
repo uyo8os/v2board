@@ -16,6 +16,7 @@ class SpeedLimitTrafficJob implements ShouldQueue
     protected $data;
     protected $server;
     protected $protocol;
+    protected $reportedAt = null;
 
     public $tries = 3;
     public $timeout = 30;
@@ -31,6 +32,7 @@ class SpeedLimitTrafficJob implements ShouldQueue
         $this->data = $data;
         $this->server = $server;
         $this->protocol = $protocol;
+        $this->reportedAt = time();
     }
 
     /**
@@ -47,7 +49,8 @@ class SpeedLimitTrafficJob implements ShouldQueue
             $this->server['id'],
             $this->server['name'] ?? '',
             $this->data,
-            $rate
+            $rate,
+            $this->reportedAt
         );
     }
 }

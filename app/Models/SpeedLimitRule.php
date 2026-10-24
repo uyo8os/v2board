@@ -13,6 +13,7 @@ class SpeedLimitRule extends Model
         'created_at' => 'timestamp',
         'updated_at' => 'timestamp',
         'plan_limit_enabled' => 'boolean',
+        'daily_enabled' => 'boolean',
         'plan_ids' => 'array',
     ];
 }

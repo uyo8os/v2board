@@ -82781,7 +82781,7 @@
                 var React = (Rr && Rr.createElement) ? Rr : (Rr.default || Rr);
                 var h = React.createElement;
                 var secondsPerMinute = 60, bytesPerGB = 1073741824;
-                function isPlanLimitEnabled(value) {
+                function isRuleOptionEnabled(value) {
                     return value === true || value === 1 || value === "1";
                 }
                 function normalizePlanIds(ids) {
@@ -82878,12 +82878,13 @@
                             visible: true,
                             // Form values use minutes/GB; the API and stored rules use seconds/bytes.
                             editing: rule ? Object.assign({}, rule, {
-                                plan_limit_enabled: isPlanLimitEnabled(rule.plan_limit_enabled),
+                                plan_limit_enabled: isRuleOptionEnabled(rule.plan_limit_enabled),
+                                daily_enabled: isRuleOptionEnabled(rule.daily_enabled),
                                 plan_ids: normalizePlanIds(rule.plan_ids),
-                                trigger_period: rule.trigger_period / secondsPerMinute,
+                                trigger_period: rule.trigger_period == null ? 120 : rule.trigger_period / secondsPerMinute,
                                 threshold: rule.threshold / bytesPerGB,
-                                limit_duration: rule.limit_duration / secondsPerMinute
-                            }) : { name: "", plan_limit_enabled: false, plan_ids: [], node_ids: [], trigger_period: 120, threshold: 0, speed_limit: 0, limit_duration: 60, disconnect_existing_connections: 0 }
+                                limit_duration: rule.limit_duration == null ? 60 : rule.limit_duration / secondsPerMinute
+                            }) : { name: "", plan_limit_enabled: false, daily_enabled: false, plan_ids: [], node_ids: [], trigger_period: 120, threshold: 0, speed_limit: 0, limit_duration: 60, disconnect_existing_connections: 0 }
                         });
                     }
                     closeModal() {
@@ -82893,17 +82894,24 @@
                         var self = this;
                         var editing = this.state.editing;
                         if (!editing.name) { window.alert("\u8bf7\u8f93\u5165\u89c4\u5219\u540d\u79f0"); return; }
-                        var planLimitEnabled = isPlanLimitEnabled(editing.plan_limit_enabled);
+                        var planLimitEnabled = isRuleOptionEnabled(editing.plan_limit_enabled);
+                        var dailyEnabled = isRuleOptionEnabled(editing.daily_enabled);
                         var planIds = normalizePlanIds(editing.plan_ids);
                         if (planLimitEnabled && planIds.length === 0) { window.alert("请至少选择一个订阅"); return; }
                         if (!editing.node_ids || editing.node_ids.length === 0) { window.alert("\u8bf7\u9009\u62e9\u81f3\u5c11\u4e00\u4e2a\u8981\u9650\u901f\u7684\u8282\u70b9"); return; }
                         var params = Object.assign({}, editing, {
                             plan_limit_enabled: planLimitEnabled ? 1 : 0,
+                            daily_enabled: dailyEnabled ? 1 : 0,
                             plan_ids: planLimitEnabled ? planIds : [],
-                            trigger_period: Math.round(Number(editing.trigger_period) * secondsPerMinute),
-                            threshold: Math.round(Number(editing.threshold) * bytesPerGB),
-                            limit_duration: Math.round(Number(editing.limit_duration) * secondsPerMinute)
+                            threshold: Math.round(Number(editing.threshold) * bytesPerGB)
                         });
+                        if (dailyEnabled) {
+                            delete params.trigger_period;
+                            delete params.limit_duration;
+                        } else {
+                            params.trigger_period = Math.round(Number(editing.trigger_period) * secondsPerMinute);
+                            params.limit_duration = Math.round(Number(editing.limit_duration) * secondsPerMinute);
+                        }
                         self.setState({ saveLoading: true });
                         fetch(apiBase() + "/api/v1/" + securePath() + "/server/speedlimit/save", {
                             method: "POST",
@@ -82988,11 +82996,11 @@
                             return h("tr", { key: rule.id },
                                 h("td", null, rule.id),
                                 h("td", null, rule.name),
-                                h("td", null, formatDuration(rule.trigger_period)),
+                                h("td", null, isRuleOptionEnabled(rule.daily_enabled) ? "每日（0点重置）" : formatDuration(rule.trigger_period)),
                                 h("td", null, nodeCount + " \u4e2a\u8282\u70b9"),
                                 h("td", null, formatBytes(rule.threshold)),
                                 h("td", null, rule.speed_limit + " Mbps"),
-                                h("td", null, formatDuration(rule.limit_duration)),
+                                h("td", null, isRuleOptionEnabled(rule.daily_enabled) ? "次日0点解除" : formatDuration(rule.limit_duration)),
                                 h("td", null, rule.disconnect_existing_connections ? h("span", { className: "badge badge-warning" }, "\u6253\u65ad\u8fde\u63a5") : h("span", { className: "text-muted" }, "\u4ec5\u9650\u901f")),
                                 h("td", null,
                                     h("label", { className: "form-check form-check-inline", style: { margin: 0 } },
@@ -83071,11 +83079,11 @@
                                             ),
                                             h("div", { className: "form-group" },
                                                 h("div", { className: "custom-control custom-switch" },
-                                                    h("input", { id: "speedlimit-plan-limit-enabled", type: "checkbox", role: "switch", className: "custom-control-input", checked: isPlanLimitEnabled(editing.plan_limit_enabled), onChange: function(ev) { self.setField("plan_limit_enabled", ev.target.checked); } }),
+                                                    h("input", { id: "speedlimit-plan-limit-enabled", type: "checkbox", role: "switch", className: "custom-control-input", checked: isRuleOptionEnabled(editing.plan_limit_enabled), onChange: function(ev) { self.setField("plan_limit_enabled", ev.target.checked); } }),
                                                     h("label", { className: "custom-control-label", htmlFor: "speedlimit-plan-limit-enabled" }, "订阅选择")
                                                 ),
-                                                h("small", { className: "form-text text-muted", style: { marginTop: "4px" } }, isPlanLimitEnabled(editing.plan_limit_enabled) ? "仅对所选订阅下的用户生效，且所选节点必须包含在该用户的订阅中，同时满足订阅和节点条件才会限速。" : "关闭时按所选节点对用户生效。"),
-                                                isPlanLimitEnabled(editing.plan_limit_enabled) ? h("div", { style: { maxHeight: "180px", overflowY: "auto", border: "1px solid #e2e8f2", borderRadius: "4px", padding: "8px", marginTop: "8px" } },
+                                                h("small", { className: "form-text text-muted", style: { marginTop: "4px" } }, isRuleOptionEnabled(editing.plan_limit_enabled) ? "仅对所选订阅下的用户生效，且所选节点必须包含在该用户的订阅中，同时满足订阅和节点条件才会限速。" : "关闭时按所选节点对用户生效。"),
+                                                isRuleOptionEnabled(editing.plan_limit_enabled) ? h("div", { style: { maxHeight: "180px", overflowY: "auto", border: "1px solid #e2e8f2", borderRadius: "4px", padding: "8px", marginTop: "8px" } },
                                                     s.plansLoading ? h("span", { className: "text-muted" }, "正在加载订阅...") : s.plansError ? h("div", null,
                                                         h("span", { className: "text-danger" }, "订阅加载失败，请重试。"),
                                                         h("button", { type: "button", className: "btn btn-sm btn-alt-secondary", style: { marginLeft: "8px" }, onClick: function() { self.loadPlans(); } }, "重试")
@@ -83088,10 +83096,17 @@
                                                 ) : null
                                             ),
                                             h("div", { className: "form-group" },
+                                                h("div", { className: "custom-control custom-switch" },
+                                                    h("input", { id: "speedlimit-daily-enabled", type: "checkbox", role: "switch", className: "custom-control-input", checked: isRuleOptionEnabled(editing.daily_enabled), onChange: function(ev) { self.setField("daily_enabled", ev.target.checked); } }),
+                                                    h("label", { className: "custom-control-label", htmlFor: "speedlimit-daily-enabled" }, "按每日")
+                                                ),
+                                                h("small", { className: "form-text text-muted", style: { marginTop: "4px" } }, (isRuleOptionEnabled(editing.daily_enabled) ? "开启后按系统时区累计当天流量，超出阈值后限速，次日凌晨0点自动解除并重新累计。" : "关闭时按触发时间和限速时长生效。") + "切换模式后重新开始统计。")
+                                            ),
+                                            !isRuleOptionEnabled(editing.daily_enabled) ? h("div", { className: "form-group" },
                                                 h("label", null, "\u89e6\u53d1\u65f6\u95f4\uff08\u5206\u949f\uff09"),
                                                 h("small", { className: "form-text text-muted", style: { marginTop: 0, marginBottom: "4px" } }, "\u4ece\u8be5\u7528\u6237\u5728\u672c\u89c4\u5219\u4e0b\u9996\u6b21\u4ea7\u751f\u6d41\u91cf\u5f00\u59cb\u8ba1\u65f6\uff0c\u5728\u6b64\u65f6\u95f4\u5185\u6d41\u91cf\u8d85\u51fa\u5219\u89e6\u53d1\u9650\u901f\uff0c\u8fc7\u671f\u672a\u89e6\u53d1\u5219\u91cd\u65b0\u8ba1\u65f6"),
                                                 h("input", { type: "number", className: "form-control", min: 1, step: "any", placeholder: "\u8bf7\u8f93\u5165\u89e6\u53d1\u65f6\u95f4\uff08\u5206\u949f\uff09", value: editing.trigger_period || "", onChange: function(ev) { self.setField("trigger_period", ev.target.value); } })
-                                            ),
+                                            ) : null,
                                             h("div", { className: "form-group" },
                                                 h("label", null, "\u9009\u62e9\u8981\u9650\u901f\u7684\u8282\u70b9"),
                                                 h("div", { style: { maxHeight: "220px", overflowY: "auto", border: "1px solid #e2e8f2", borderRadius: "4px", padding: "8px" } },
@@ -83111,11 +83126,11 @@
                                                 h("label", null, "\u89e6\u53d1\u540e\u9650\u901f\uff08Mbps\uff09"),
                                                 h("input", { type: "number", className: "form-control", min: 1, placeholder: "\u8bf7\u8f93\u5165\u9650\u901f\u503c", value: editing.speed_limit || "", onChange: function(ev) { self.setField("speed_limit", parseInt(ev.target.value) || 0); } })
                                             ),
-                                            h("div", { className: "form-group" },
+                                            !isRuleOptionEnabled(editing.daily_enabled) ? h("div", { className: "form-group" },
                                                 h("label", null, "\u9650\u901f\u65f6\u957f\uff08\u5206\u949f\uff09"),
                                                 h("small", { className: "form-text text-muted", style: { marginTop: 0, marginBottom: "4px" } }, "\u89e6\u53d1\u9650\u901f\u540e\u7ecf\u8fc7\u8be5\u65f6\u957f\u81ea\u52a8\u89e3\u9664\uff0c\u89e3\u9664\u540e\u5f00\u59cb\u4e0b\u4e2a\u5468\u671f"),
                                                 h("input", { type: "number", className: "form-control", min: 1, step: "any", placeholder: "\u8bf7\u8f93\u5165\u9650\u901f\u65f6\u957f\uff08\u5206\u949f\uff09", value: editing.limit_duration || "", onChange: function(ev) { self.setField("limit_duration", ev.target.value); } })
-                                            ),
+                                            ) : null,
                                             h("div", { className: "form-group" },
                                                 h("label", { className: "form-check", style: { position: "relative", display: "block" } },
                                                     h("input", { type: "checkbox", checked: !!editing.disconnect_existing_connections, onChange: function(ev) { self.setField("disconnect_existing_connections", ev.target.checked ? 1 : 0); }, style: { position: "static", marginRight: "6px" } }),

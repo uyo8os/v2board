@@ -26,23 +26,30 @@ class SpeedLimitController extends Controller
 
     public function save(Request $request)
     {
-        $params = $request->validate([
+        $dailyEnabled = in_array($request->input('daily_enabled'), [true, 1, '1'], true);
+        $validationRules = [
             'name' => 'required',
             'node_ids' => 'required|array|min:1',
             'plan_limit_enabled' => 'nullable|boolean',
+            'daily_enabled' => 'nullable|boolean',
             'plan_ids' => 'required_if:plan_limit_enabled,1|nullable|array',
             'plan_ids.*' => 'integer|min:1|exists:v2_plan,id',
-            'trigger_period' => 'required|integer|min:60',
             'threshold' => 'required|integer|min:1',
             'speed_limit' => 'required|integer|min:1',
-            'limit_duration' => 'required|integer|min:60',
             'disconnect_existing_connections' => 'nullable|boolean',
-        ], [
+        ];
+        // 每日模式忽略隐藏的时间参数，编辑时保留原值供切回普通模式使用。
+        if (!$dailyEnabled) {
+            $validationRules['trigger_period'] = 'required|integer|min:60';
+            $validationRules['limit_duration'] = 'required|integer|min:60';
+        }
+        $params = $request->validate($validationRules, [
             'name.required' => '规则名称不能为空',
             'node_ids.required' => '请选择要限速的节点',
             'node_ids.array' => '节点参数格式有误',
             'node_ids.min' => '请至少选择一个节点',
             'plan_limit_enabled.boolean' => '订阅选择开关参数有误',
+            'daily_enabled.boolean' => '按每日开关参数有误',
             'plan_ids.required_if' => '请至少选择一个订阅',
             'plan_ids.array' => '订阅参数格式有误',
             'plan_ids.*.integer' => '订阅参数格式有误',
@@ -62,6 +69,7 @@ class SpeedLimitController extends Controller
 
         $params['disconnect_existing_connections'] = !empty($params['disconnect_existing_connections']) ? 1 : 0;
         $params['plan_limit_enabled'] = !empty($params['plan_limit_enabled']) ? 1 : 0;
+        $params['daily_enabled'] = $dailyEnabled ? 1 : 0;
         $params['plan_ids'] = $params['plan_limit_enabled']
             ? array_values(array_unique(array_map('intval', $params['plan_ids'] ?? [])))
             : [];
@@ -87,12 +95,20 @@ class SpeedLimitController extends Controller
             sort($newPlanIds);
             $scopeChanged = (bool)$rule->plan_limit_enabled !== (bool)$params['plan_limit_enabled']
                 || ($params['plan_limit_enabled'] && $oldPlanIds !== $newPlanIds);
+            $modeChanged = (bool)$rule->daily_enabled !== (bool)$params['daily_enabled'];
             try {
-                DB::transaction(function () use ($rule, $params, $scopeChanged) {
+                DB::transaction(function () use ($rule, $params, $scopeChanged, $modeChanged) {
                     $rule->update($params);
                     // 新的适用范围从新窗口计数，已触发记录保留并在节点下发时重新检查范围。
-                    if ($scopeChanged) {
+                    if ($scopeChanged || $modeChanged) {
                         SpeedLimitRecord::where('rule_id', $rule->id)->where('triggered', 0)->delete();
+                    }
+                    // 切换计时模式后重新统计，结束旧模式的限速并保留其历史记录。
+                    if ($modeChanged) {
+                        SpeedLimitRecord::where('rule_id', $rule->id)
+                            ->where('triggered', 1)
+                            ->whereNull('released_at')
+                            ->update(['released_at' => time(), 'release_type' => 'manual']);
                     }
                 });
                 return ['data' => true];
@@ -102,6 +118,10 @@ class SpeedLimitController extends Controller
         }
 
         $params['enable'] = 1;
+        if ($dailyEnabled) {
+            $params['trigger_period'] = 7200;
+            $params['limit_duration'] = 3600;
+        }
         if (!SpeedLimitRule::create($params)) abort(500, '创建失败');
         return ['data' => true];
     }

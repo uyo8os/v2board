@@ -78,6 +78,20 @@ class SpeedLimitService
         return in_array((int)$scopedUserPlans[$userId], array_map('intval', $rule->plan_ids), true);
     }
 
+    private function getDailyWindow(int $timestamp): array
+    {
+        $timezone = new \DateTimeZone(config('app.timezone', 'Asia/Shanghai'));
+        $start = (new \DateTimeImmutable('@' . $timestamp))->setTimezone($timezone)->setTime(0, 0, 0);
+        return [$start->getTimestamp(), $start->modify('+1 day')->getTimestamp()];
+    }
+
+    private function isRecordEffective(SpeedLimitRecord $record, SpeedLimitRule $rule, int $now): bool
+    {
+        // 每日规则到零点立即失效，不依赖每分钟运行的解除任务。
+        if (!$rule->daily_enabled) return true;
+        return (int)$record->release_at > $now && (int)$record->window_end_at > $now;
+    }
+
     /**
      * 处理某节点一次流量上报中多个用户的流量，累加进各覆盖此节点的规则的、该用户当前触发窗口记录中
      * $data: [userId => [upload, download]]，均为节点上报的原始字节数（未乘倍率）。
@@ -85,19 +99,23 @@ class SpeedLimitService
      * 实际使用流量，倍率单独存一份，展示时再按 (实际上传+实际下载) × 倍率 现场计算合计，
      * 与v2board原生用户流量扣费口径保持一致。
      */
-    public function handleNodeTraffic(string $nodeType, $nodeId, string $nodeName, array $data, float $rate = 1.0)
+    public function handleNodeTraffic(string $nodeType, $nodeId, string $nodeName, array $data, float $rate = 1.0, ?int $reportedAt = null)
     {
         $rules = $this->getRulesForNode($nodeType, $nodeId);
         if ($rules->isEmpty()) return;
         $scopedUserPlans = $this->getScopedUserPlansForNode($rules, $nodeType, $nodeId, array_keys($data));
         $now = time();
+        $reportedAt = min($reportedAt ?? $now, $now);
         foreach ($rules as $rule) {
+            $dailyWindow = $rule->daily_enabled ? $this->getDailyWindow($reportedAt) : null;
+            // 队列延迟到次日的旧报告不计入新一天，也不重新触发昨日限速。
+            if ($dailyWindow && $dailyWindow[1] <= $now) continue;
             foreach ($data as $userId => $traffic) {
                 if (!$this->ruleMatchesUser($rule, (int)$userId, $scopedUserPlans)) continue;
                 $u = (int)($traffic[0] ?? 0);
                 $d = (int)($traffic[1] ?? 0);
                 if ($u <= 0 && $d <= 0) continue;
-                $this->accumulate($rule, (int)$userId, $now, $nodeType, $nodeId, $nodeName, $u, $d, $rate);
+                $this->accumulate($rule, (int)$userId, $now, $nodeType, $nodeId, $nodeName, $u, $d, $rate, $dailyWindow);
             }
         }
     }
@@ -112,7 +130,7 @@ class SpeedLimitService
      * 顶层 record.u/d 存储的是"扣除流量合计"（(实际上传+实际下载)×倍率累加），用于跟阈值比较；
      * node_traffic 明细里存储的是实际流量与倍率，不预先相乘，供展示时现场还原计算过程。
      */
-    private function accumulate(SpeedLimitRule $rule, int $userId, int $now, string $nodeType, $nodeId, string $nodeName, int $u, int $d, float $rate = 1.0)
+    private function accumulate(SpeedLimitRule $rule, int $userId, int $now, string $nodeType, $nodeId, string $nodeName, int $u, int $d, float $rate = 1.0, ?array $dailyWindow = null)
     {
         $nodeKey = "{$nodeType}-{$nodeId}";
         try {
@@ -122,6 +140,14 @@ class SpeedLimitService
                 ->whereNull('released_at')
                 ->lockForUpdate()
                 ->first();
+
+            if ($record && $rule->daily_enabled && $record->triggered
+                && !$this->isRecordEffective($record, $rule, $now)) {
+                $record->released_at = $now;
+                $record->release_type = 'auto';
+                $record->save();
+                $record = null;
+            }
 
             if ($record && $record->triggered) {
                 // 已触发限速中，等待解除，不再累加/判断
@@ -137,11 +163,13 @@ class SpeedLimitService
 
             if (!$record) {
                 $period = max(60, (int)$rule->trigger_period);
+                $dailyWindow = $rule->daily_enabled ? ($dailyWindow ?? $this->getDailyWindow($now)) : null;
                 $record = new SpeedLimitRecord();
                 $record->rule_id = $rule->id;
                 $record->user_id = $userId;
+                // 起点保留首次流量时间，避免每日固定零点与手动解除后的历史记录冲突。
                 $record->window_start_at = $now;
-                $record->window_end_at = $now + $period;
+                $record->window_end_at = $dailyWindow ? $dailyWindow[1] : $now + $period;
                 $record->u = 0;
                 $record->d = 0;
                 $record->node_traffic = json_encode([]);
@@ -166,7 +194,9 @@ class SpeedLimitService
             if (!$record->triggered && ($record->u + $record->d) >= $rule->threshold) {
                 $record->triggered = 1;
                 $record->triggered_at = $now;
-                $record->release_at = $now + max(60, (int)$rule->limit_duration);
+                $record->release_at = $rule->daily_enabled
+                    ? $record->window_end_at
+                    : $now + max(60, (int)$rule->limit_duration);
                 $justTriggered = true;
             }
 
@@ -242,11 +272,17 @@ class SpeedLimitService
             if ($this->ruleMatchesUser($rule, $userId, $userPlans)) $ruleIds[] = $rule->id;
         }
         if (empty($ruleIds)) return false;
-        return SpeedLimitRecord::whereIn('rule_id', $ruleIds)
+        $records = SpeedLimitRecord::whereIn('rule_id', $ruleIds)
             ->where('user_id', $userId)
             ->where('triggered', 1)
             ->whereNull('released_at')
-            ->exists();
+            ->get(['rule_id', 'release_at', 'window_end_at']);
+        $ruleMap = $rules->keyBy('id');
+        $now = time();
+        foreach ($records as $record) {
+            if ($this->isRecordEffective($record, $ruleMap[$record->rule_id], $now)) return true;
+        }
+        return false;
     }
 
     private function notifyTriggered(SpeedLimitRule $rule, SpeedLimitRecord $record)
@@ -275,12 +311,14 @@ class SpeedLimitService
         $records = SpeedLimitRecord::whereIn('rule_id', $ruleIds)
             ->where('triggered', 1)
             ->whereNull('released_at')
-            ->get(['rule_id', 'user_id']);
+            ->get(['rule_id', 'user_id', 'release_at', 'window_end_at']);
         $scopedUserPlans = $this->getScopedUserPlansForNode($rules, $nodeType, $nodeId, $records->pluck('user_id')->unique()->all());
         $map = [];
+        $now = time();
         foreach ($records as $record) {
             $rule = $ruleMap[$record->rule_id] ?? null;
             if (!$rule) continue;
+            if (!$this->isRecordEffective($record, $rule, $now)) continue;
             $uid = (int)$record->user_id;
             if (!$this->ruleMatchesUser($rule, $uid, $scopedUserPlans)) continue;
             $limit = (int)$rule->speed_limit;

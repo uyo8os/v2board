@@ -920,3 +920,6 @@ ADD `plan_limit_enabled` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否仅对�
 
 ALTER TABLE `v2_speed_limit_rule`
 ADD `plan_ids` text DEFAULT NULL COMMENT '适用订阅ID列表，JSON数组，开关关闭时忽略' AFTER `plan_limit_enabled`;
+
+ALTER TABLE `v2_speed_limit_rule`
+ADD `daily_enabled` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否按每日统计并于次日0点解除限速' AFTER `name`;
