@@ -12,5 +12,7 @@ class SpeedLimitRule extends Model
     protected $casts = [
         'created_at' => 'timestamp',
         'updated_at' => 'timestamp',
+        'plan_limit_enabled' => 'boolean',
+        'plan_ids' => 'array',
     ];
 }

@@ -305,6 +305,8 @@ DROP TABLE IF EXISTS `v2_speed_limit_rule`;
 CREATE TABLE `v2_speed_limit_rule` (
                                    `id` int(11) NOT NULL AUTO_INCREMENT,
                                    `name` varchar(255) NOT NULL COMMENT '规则名称',
+                                   `plan_limit_enabled` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否仅对所选订阅生效',
+                                   `plan_ids` text DEFAULT NULL COMMENT '适用订阅ID列表，JSON数组，开关关闭时忽略',
                                    `node_ids` text NOT NULL COMMENT '限速节点列表，JSON数组[{type,id}]',
                                    `trigger_period` int(11) NOT NULL COMMENT '触发时间窗口，单位秒，用户级别，从该用户本窗口第一次产生流量起算',
                                    `threshold` bigint(20) NOT NULL COMMENT '触发流量阈值，单位字节',

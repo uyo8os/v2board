@@ -82781,6 +82781,14 @@
                 var React = (Rr && Rr.createElement) ? Rr : (Rr.default || Rr);
                 var h = React.createElement;
                 var secondsPerMinute = 60, bytesPerGB = 1073741824;
+                function isPlanLimitEnabled(value) {
+                    return value === true || value === 1 || value === "1";
+                }
+                function normalizePlanIds(ids) {
+                    return (Array.isArray(ids) ? ids : []).map(Number).filter(function(id, index, values) {
+                        return isFinite(id) && id > 0 && Math.floor(id) === id && values.indexOf(id) === index;
+                    });
+                }
                 function apiBase() {
                     return (window.settings && window.settings.host) ? window.settings.host : window.location.origin;
                 }
@@ -82811,6 +82819,9 @@
                         this.state = {
                             rules: [],
                             nodes: [],
+                            plans: [],
+                            plansLoading: false,
+                            plansError: false,
                             loading: false,
                             saveLoading: false,
                             visible: false,
@@ -82822,6 +82833,7 @@
                     componentDidMount() {
                         this.load();
                         this.loadNodes();
+                        this.loadPlans();
                     }
                     load() {
                         var self = this;
@@ -82848,15 +82860,30 @@
                                 self.setState({ nodes: (res && res.data) || [] });
                             }).catch(function() {});
                     }
+                    loadPlans() {
+                        var self = this;
+                        self.setState({ plansLoading: true, plansError: false });
+                        fetch(apiBase() + "/api/v1/" + securePath() + "/plan/fetch", { method: "GET", headers: authHeaders(), credentials: "include" })
+                            .then(function(r) {
+                                if (!r.ok) throw new Error("Unable to load subscriptions");
+                                return r.json();
+                            })
+                            .then(function(res) {
+                                if (!res || !Array.isArray(res.data)) throw new Error("Invalid subscriptions response");
+                                self.setState({ plans: res.data, plansLoading: false });
+                            }).catch(function() { self.setState({ plansLoading: false, plansError: true }); });
+                    }
                     openModal(rule) {
                         this.setState({
                             visible: true,
                             // Form values use minutes/GB; the API and stored rules use seconds/bytes.
                             editing: rule ? Object.assign({}, rule, {
+                                plan_limit_enabled: isPlanLimitEnabled(rule.plan_limit_enabled),
+                                plan_ids: normalizePlanIds(rule.plan_ids),
                                 trigger_period: rule.trigger_period / secondsPerMinute,
                                 threshold: rule.threshold / bytesPerGB,
                                 limit_duration: rule.limit_duration / secondsPerMinute
-                            }) : { name: "", node_ids: [], trigger_period: 120, threshold: 0, speed_limit: 0, limit_duration: 60, disconnect_existing_connections: 0 }
+                            }) : { name: "", plan_limit_enabled: false, plan_ids: [], node_ids: [], trigger_period: 120, threshold: 0, speed_limit: 0, limit_duration: 60, disconnect_existing_connections: 0 }
                         });
                     }
                     closeModal() {
@@ -82866,8 +82893,13 @@
                         var self = this;
                         var editing = this.state.editing;
                         if (!editing.name) { window.alert("\u8bf7\u8f93\u5165\u89c4\u5219\u540d\u79f0"); return; }
+                        var planLimitEnabled = isPlanLimitEnabled(editing.plan_limit_enabled);
+                        var planIds = normalizePlanIds(editing.plan_ids);
+                        if (planLimitEnabled && planIds.length === 0) { window.alert("请至少选择一个订阅"); return; }
                         if (!editing.node_ids || editing.node_ids.length === 0) { window.alert("\u8bf7\u9009\u62e9\u81f3\u5c11\u4e00\u4e2a\u8981\u9650\u901f\u7684\u8282\u70b9"); return; }
                         var params = Object.assign({}, editing, {
+                            plan_limit_enabled: planLimitEnabled ? 1 : 0,
+                            plan_ids: planLimitEnabled ? planIds : [],
                             trigger_period: Math.round(Number(editing.trigger_period) * secondsPerMinute),
                             threshold: Math.round(Number(editing.threshold) * bytesPerGB),
                             limit_duration: Math.round(Number(editing.limit_duration) * secondsPerMinute)
@@ -82912,6 +82944,16 @@
                     }
                     history(rule) {
                         window.g_history && window.g_history.push("/server/speedlimit/history?rule_id=" + rule.id + "&name=" + encodeURIComponent(rule.name));
+                    }
+                    togglePlan(plan, checked) {
+                        var planIds = normalizePlanIds(this.state.editing.plan_ids);
+                        var planId = Number(plan.id);
+                        if (checked) {
+                            if (planIds.indexOf(planId) === -1) planIds.push(planId);
+                        } else {
+                            planIds = planIds.filter(function(id) { return id !== planId; });
+                        }
+                        this.setField("plan_ids", planIds);
                     }
                     toggleNode(node, checked) {
                         var editing = Object.assign({}, this.state.editing);
@@ -83026,6 +83068,24 @@
                                             h("div", { className: "form-group" },
                                                 h("label", null, "\u89c4\u5219\u540d\u79f0"),
                                                 h("input", { type: "text", className: "form-control", placeholder: "\u8bf7\u8f93\u5165\u89c4\u5219\u540d\u79f0", value: editing.name || "", onChange: function(ev) { self.setField("name", ev.target.value); } })
+                                            ),
+                                            h("div", { className: "form-group" },
+                                                h("div", { className: "custom-control custom-switch" },
+                                                    h("input", { id: "speedlimit-plan-limit-enabled", type: "checkbox", role: "switch", className: "custom-control-input", checked: isPlanLimitEnabled(editing.plan_limit_enabled), onChange: function(ev) { self.setField("plan_limit_enabled", ev.target.checked); } }),
+                                                    h("label", { className: "custom-control-label", htmlFor: "speedlimit-plan-limit-enabled" }, "订阅选择")
+                                                ),
+                                                h("small", { className: "form-text text-muted", style: { marginTop: "4px" } }, isPlanLimitEnabled(editing.plan_limit_enabled) ? "仅对所选订阅下的用户生效，且所选节点必须包含在该用户的订阅中，同时满足订阅和节点条件才会限速。" : "关闭时按所选节点对用户生效。"),
+                                                isPlanLimitEnabled(editing.plan_limit_enabled) ? h("div", { style: { maxHeight: "180px", overflowY: "auto", border: "1px solid #e2e8f2", borderRadius: "4px", padding: "8px", marginTop: "8px" } },
+                                                    s.plansLoading ? h("span", { className: "text-muted" }, "正在加载订阅...") : s.plansError ? h("div", null,
+                                                        h("span", { className: "text-danger" }, "订阅加载失败，请重试。"),
+                                                        h("button", { type: "button", className: "btn btn-sm btn-alt-secondary", style: { marginLeft: "8px" }, onClick: function() { self.loadPlans(); } }, "重试")
+                                                    ) : s.plans.length ? s.plans.map(function(plan) {
+                                                        return h("label", { key: plan.id, className: "form-check", style: { position: "relative", display: "block", marginBottom: "4px" } },
+                                                            h("input", { type: "checkbox", checked: normalizePlanIds(editing.plan_ids).indexOf(Number(plan.id)) !== -1, onChange: function(ev) { self.togglePlan(plan, ev.target.checked); }, style: { position: "static", marginRight: "6px" } }),
+                                                            plan.name + (Number(plan.show) === 0 ? "（已隐藏）" : "")
+                                                        );
+                                                    }) : h("span", { className: "text-muted" }, "暂无可选订阅，请先在订阅管理中添加。")
+                                                ) : null
                                             ),
                                             h("div", { className: "form-group" },
                                                 h("label", null, "\u89e6\u53d1\u65f6\u95f4\uff08\u5206\u949f\uff09"),

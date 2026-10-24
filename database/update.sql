@@ -914,3 +914,9 @@ ALTER TABLE `v2_speed_limit_rule`
 ADD `disconnect_existing_connections` tinyint(1) NOT NULL DEFAULT '0' COMMENT '触发时是否强制打断该用户在选中节点上已建立的连接' AFTER `limit_duration`;
 
 TRUNCATE TABLE `v2_speed_limit_record`;
+
+ALTER TABLE `v2_speed_limit_rule`
+ADD `plan_limit_enabled` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否仅对所选订阅生效' AFTER `name`;
+
+ALTER TABLE `v2_speed_limit_rule`
+ADD `plan_ids` text DEFAULT NULL COMMENT '适用订阅ID列表，JSON数组，开关关闭时忽略' AFTER `plan_limit_enabled`;

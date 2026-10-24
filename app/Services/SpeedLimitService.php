@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Plan;
 use App\Models\SpeedLimitRecord;
 use App\Models\SpeedLimitRule;
 use App\Models\User;
@@ -41,6 +42,43 @@ class SpeedLimitService
     }
 
     /**
+     * 批量获取当前节点上满足订阅范围的用户，避免逐用户查询。
+     * 订阅权限组必须包含在可见节点的权限组列表中，未上架的订阅仍可生效。
+     */
+    private function getScopedUserPlansForNode($rules, string $nodeType, $nodeId, array $userIds): array
+    {
+        $planIds = [];
+        foreach ($rules as $rule) {
+            if (!$rule->plan_limit_enabled || !is_array($rule->plan_ids)) continue;
+            foreach ($rule->plan_ids as $planId) {
+                if ((int)$planId > 0) $planIds[(int)$planId] = (int)$planId;
+            }
+        }
+        if (empty($planIds) || empty($userIds)) return [];
+
+        $node = (new ServerService())->getServer($nodeId, $nodeType);
+        if (!$node || !$node->show || !is_array($node->group_id) || empty($node->group_id)) return [];
+
+        $eligiblePlanIds = Plan::whereIn('id', array_values($planIds))
+            ->whereIn('group_id', $node->group_id)
+            ->pluck('id')
+            ->all();
+        if (empty($eligiblePlanIds)) return [];
+
+        return User::whereIn('id', $userIds)
+            ->whereIn('plan_id', $eligiblePlanIds)
+            ->pluck('plan_id', 'id')
+            ->all();
+    }
+
+    private function ruleMatchesUser(SpeedLimitRule $rule, int $userId, array $scopedUserPlans): bool
+    {
+        if (!$rule->plan_limit_enabled) return true;
+        if (!isset($scopedUserPlans[$userId]) || !is_array($rule->plan_ids)) return false;
+        return in_array((int)$scopedUserPlans[$userId], array_map('intval', $rule->plan_ids), true);
+    }
+
+    /**
      * 处理某节点一次流量上报中多个用户的流量，累加进各覆盖此节点的规则的、该用户当前触发窗口记录中
      * $data: [userId => [upload, download]]，均为节点上报的原始字节数（未乘倍率）。
      * 倍率仅用于计算"扣除流量合计"（用于跟阈值比较），节点流量明细里保留的是未乘倍率的
@@ -51,9 +89,11 @@ class SpeedLimitService
     {
         $rules = $this->getRulesForNode($nodeType, $nodeId);
         if ($rules->isEmpty()) return;
+        $scopedUserPlans = $this->getScopedUserPlansForNode($rules, $nodeType, $nodeId, array_keys($data));
         $now = time();
         foreach ($rules as $rule) {
             foreach ($data as $userId => $traffic) {
+                if (!$this->ruleMatchesUser($rule, (int)$userId, $scopedUserPlans)) continue;
                 $u = (int)($traffic[0] ?? 0);
                 $d = (int)($traffic[1] ?? 0);
                 if ($u <= 0 && $d <= 0) continue;
@@ -159,10 +199,23 @@ class SpeedLimitService
             $type = $node['type'] ?? null;
             $id = $node['id'] ?? null;
             if (!$type || !$id) continue;
+            if ($rule->plan_limit_enabled) {
+                $userPlans = $this->getScopedUserPlansForNode([$rule], $type, $id, [$userId]);
+                if (!$this->ruleMatchesUser($rule, $userId, $userPlans)) continue;
+            }
             $cacheKey = CacheKey::get('SPEED_LIMIT_KICK_SIGNAL', "{$type}-{$id}-{$userId}");
             // 信号保留5分钟：足够节点跨越几次轮询周期（默认60秒/次）取到，
             // 又不会在节点长时间离线时无限期占用缓存
-            Cache::put($cacheKey, 1, 300);
+            if (!$rule->plan_limit_enabled) {
+                Cache::put($cacheKey, 1, 300);
+            } else {
+                $signal = Cache::get($cacheKey);
+                // 无订阅限制的断连信号优先，多个订阅规则共享同一节点信号。
+                if ($signal === 1) continue;
+                $ruleIds = is_array($signal) ? $signal : [];
+                $ruleIds[] = (int)$rule->id;
+                Cache::put($cacheKey, array_values(array_unique($ruleIds)), 300);
+            }
         }
     }
 
@@ -173,11 +226,27 @@ class SpeedLimitService
     public function consumeKickSignal(string $nodeType, $nodeId, int $userId): bool
     {
         $cacheKey = CacheKey::get('SPEED_LIMIT_KICK_SIGNAL', "{$nodeType}-{$nodeId}-{$userId}");
-        if (Cache::get($cacheKey)) {
-            Cache::forget($cacheKey);
-            return true;
+        $signal = Cache::get($cacheKey);
+        if (!$signal) return false;
+        Cache::forget($cacheKey);
+
+        // 用户或规则可能在触发后改变，旧版标量信号也重新验证当前范围与生效记录。
+        $rules = $this->getRulesForNode($nodeType, $nodeId)->filter(function ($rule) use ($signal) {
+            return $rule->disconnect_existing_connections
+                && (!is_array($signal) || in_array((int)$rule->id, $signal, true));
+        });
+        if ($rules->isEmpty()) return false;
+        $userPlans = $this->getScopedUserPlansForNode($rules, $nodeType, $nodeId, [$userId]);
+        $ruleIds = [];
+        foreach ($rules as $rule) {
+            if ($this->ruleMatchesUser($rule, $userId, $userPlans)) $ruleIds[] = $rule->id;
         }
-        return false;
+        if (empty($ruleIds)) return false;
+        return SpeedLimitRecord::whereIn('rule_id', $ruleIds)
+            ->where('user_id', $userId)
+            ->where('triggered', 1)
+            ->whereNull('released_at')
+            ->exists();
     }
 
     private function notifyTriggered(SpeedLimitRule $rule, SpeedLimitRecord $record)
@@ -207,11 +276,13 @@ class SpeedLimitService
             ->where('triggered', 1)
             ->whereNull('released_at')
             ->get(['rule_id', 'user_id']);
+        $scopedUserPlans = $this->getScopedUserPlansForNode($rules, $nodeType, $nodeId, $records->pluck('user_id')->unique()->all());
         $map = [];
         foreach ($records as $record) {
             $rule = $ruleMap[$record->rule_id] ?? null;
             if (!$rule) continue;
             $uid = (int)$record->user_id;
+            if (!$this->ruleMatchesUser($rule, $uid, $scopedUserPlans)) continue;
             $limit = (int)$rule->speed_limit;
             if (!isset($map[$uid]) || $limit < $map[$uid]) {
                 $map[$uid] = $limit;

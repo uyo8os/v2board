@@ -8,6 +8,7 @@ use App\Models\SpeedLimitRule;
 use App\Models\User;
 use App\Services\SpeedLimitService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class SpeedLimitController extends Controller
 {
@@ -28,6 +29,9 @@ class SpeedLimitController extends Controller
         $params = $request->validate([
             'name' => 'required',
             'node_ids' => 'required|array|min:1',
+            'plan_limit_enabled' => 'nullable|boolean',
+            'plan_ids' => 'required_if:plan_limit_enabled,1|nullable|array',
+            'plan_ids.*' => 'integer|min:1|exists:v2_plan,id',
             'trigger_period' => 'required|integer|min:60',
             'threshold' => 'required|integer|min:1',
             'speed_limit' => 'required|integer|min:1',
@@ -38,6 +42,12 @@ class SpeedLimitController extends Controller
             'node_ids.required' => '请选择要限速的节点',
             'node_ids.array' => '节点参数格式有误',
             'node_ids.min' => '请至少选择一个节点',
+            'plan_limit_enabled.boolean' => '订阅选择开关参数有误',
+            'plan_ids.required_if' => '请至少选择一个订阅',
+            'plan_ids.array' => '订阅参数格式有误',
+            'plan_ids.*.integer' => '订阅参数格式有误',
+            'plan_ids.*.min' => '订阅参数格式有误',
+            'plan_ids.*.exists' => '所选订阅不存在',
             'trigger_period.required' => '触发时间不能为空',
             'trigger_period.integer' => '触发时间必须为整数',
             'trigger_period.min' => '触发时间不能少于60秒',
@@ -51,6 +61,11 @@ class SpeedLimitController extends Controller
         ]);
 
         $params['disconnect_existing_connections'] = !empty($params['disconnect_existing_connections']) ? 1 : 0;
+        $params['plan_limit_enabled'] = !empty($params['plan_limit_enabled']) ? 1 : 0;
+        $params['plan_ids'] = $params['plan_limit_enabled']
+            ? array_values(array_unique(array_map('intval', $params['plan_ids'] ?? [])))
+            : [];
+        if ($params['plan_limit_enabled'] && empty($params['plan_ids'])) abort(422, '请至少选择一个订阅');
 
         $normalizedNodeIds = [];
         foreach ((array)$params['node_ids'] as $node) {
@@ -66,8 +81,20 @@ class SpeedLimitController extends Controller
         if ($request->input('id')) {
             $rule = SpeedLimitRule::find($request->input('id'));
             if (!$rule) abort(500, '规则不存在');
+            $oldPlanIds = array_map('intval', $rule->plan_ids ?? []);
+            $newPlanIds = $params['plan_ids'];
+            sort($oldPlanIds);
+            sort($newPlanIds);
+            $scopeChanged = (bool)$rule->plan_limit_enabled !== (bool)$params['plan_limit_enabled']
+                || ($params['plan_limit_enabled'] && $oldPlanIds !== $newPlanIds);
             try {
-                $rule->update($params);
+                DB::transaction(function () use ($rule, $params, $scopeChanged) {
+                    $rule->update($params);
+                    // 新的适用范围从新窗口计数，已触发记录保留并在节点下发时重新检查范围。
+                    if ($scopeChanged) {
+                        SpeedLimitRecord::where('rule_id', $rule->id)->where('triggered', 0)->delete();
+                    }
+                });
                 return ['data' => true];
             } catch (\Exception $e) {
                 abort(500, '保存失败');
