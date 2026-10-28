@@ -26,7 +26,7 @@ class ClientController extends Controller
             $serverService = new ServerService();
             $servers = $serverService->getAvailableServers($user);
             if($flag) {
-                if (!strpos($flag, 'sing')) {
+                if (strpos($flag, 'sing') === false) {
                     $this->setSubscribeInfoToServers($servers, $user);
                     foreach (array_reverse(glob(app_path('Protocols') . '/*.php')) as $file) {
                         $file = 'App\\Protocols\\' . basename($file, '.php');
@@ -41,7 +41,7 @@ class ClientController extends Controller
                     if (preg_match('/sing-box\s+([0-9.]+)/i', $flag, $matches)) {
                         $version = $matches[1];
                     }
-                    if (!is_null($version) && $version >= '1.12.0') {
+                    if (!is_null($version) && version_compare($version, '1.12.0', '>=')) {
                         $class = new Singbox($user, $servers);
                     } else {
                         $class = new SingboxOld($user, $servers);

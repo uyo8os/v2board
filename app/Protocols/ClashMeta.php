@@ -401,20 +401,20 @@ class ClashMeta
 
     public static function buildAnyTLS($password, $server)
     {
+        $tlsSettings = $server['tls_settings'] ?? [];
         $array = [
             'name' => $server['name'],
             'type' => 'anytls',
             'server' => $server['host'],
             'port' => $server['port'],
             'password' => $password,
-            'client-fingerprint' => 'chrome',
+            'client-fingerprint' => !empty($tlsSettings['fingerprint']) ? $tlsSettings['fingerprint'] : 'chrome',
             'udp' => true,
             'alpn' => [
                 'h2',
                 'http/1.1',
             ],
         ];
-        $tlsSettings = $server['tls_settings'] ?? [];
         $array['sni'] = $server['server_name'] ?? ($tlsSettings['server_name'] ?? '');
         $array['skip-cert-verify'] = ($server['insecure'] ?? ($tlsSettings['allow_insecure'] ?? 0)) == 1 ? true : false;
         return $array;

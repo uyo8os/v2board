@@ -376,8 +376,8 @@ class Singbox
             ],
             'server_name' => $server['server_name'] ?? ($tlsSettings['server_name'] ?? '')
         ];
-        if ($server['tls_settings']) {
-            if ($server['tls'] == 2) {
+        if ($tlsSettings) {
+            if (($server['tls'] ?? 1) == 2) {
                 $tlsConfig['reality'] = [
                     'enabled' => true,
                     'public_key' => $tlsSettings['public_key'],
@@ -391,15 +391,15 @@ class Singbox
         }
         $array['tls'] = $tlsConfig;
 
-        if ($server['network'] === 'tcp') {
-            $tcpSettings = $server['network_settings'];
+        if (($server['network'] ?? 'tcp') === 'tcp') {
+            $tcpSettings = $server['network_settings'] ?? [];
             if (isset($tcpSettings['header']['type']) && $tcpSettings['header']['type'] == 'http') $array['transport']['type'] = $tcpSettings['header']['type'];
             if (isset($tcpSettings['header']['request']['headers']['Host'])) $array['transport']['host'] = $tcpSettings['header']['request']['headers']['Host'];
             if (isset($tcpSettings['header']['request']['path'][0])) $array['transport']['path'] = $tcpSettings['header']['request']['path'][0];
         }
-        if ($server['network'] === 'ws') {
+        if (($server['network'] ?? 'tcp') === 'ws') {
             $array['transport']['type'] ='ws';
-            if ($server['network_settings']) {
+            if (!empty($server['network_settings'])) {
                 $wsSettings = $server['network_settings'];
                 if (isset($wsSettings['path']) && !empty($wsSettings['path'])) $array['transport']['path'] = $wsSettings['path'];
                 if (isset($wsSettings['headers']['Host']) && !empty($wsSettings['headers']['Host'])) $array['transport']['headers'] = ['Host' => array($wsSettings['headers']['Host'])];
@@ -407,9 +407,9 @@ class Singbox
                 $array['transport']['early_data_header_name'] = 'Sec-WebSocket-Protocol';
             }
         }
-        if ($server['network'] === 'grpc') {
+        if (($server['network'] ?? 'tcp') === 'grpc') {
             $array['transport']['type'] ='grpc';
-            if ($server['network_settings']) {
+            if (!empty($server['network_settings'])) {
                 $grpcSettings = $server['network_settings'];
                 if (isset($grpcSettings['serviceName'])) $array['transport']['service_name'] = $grpcSettings['serviceName'];
             }
