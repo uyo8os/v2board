@@ -45,7 +45,7 @@ class InsiderGuardService
     const BUCKET_SECONDS = 3600;
     // 同一用户同一小时普通桶的目标上限（IP × UA 组合），达到后合并到溢出桶
     const BUCKETS_PER_HOUR_LIMIT = 30;
-    // UA 字典每个 UA 在这个窗口内只写一次（更新 last_seen）
+    // UA 字典按主键确认存在，已有 UA 在这个窗口内不重复更新 last_seen
     const UA_SEEN_SECONDS = 86400;
     // 清理时每批删除的行数
     const CLEANUP_BATCH = 5000;
@@ -232,19 +232,22 @@ class InsiderGuardService
         }
     }
 
-    /** UA 字典：同一个 UA 一天只写一次；缓存或写入失败只记日志（活动行照常写，带哈希），下次再试 */
+    /**
+     * UA 字典：缺失立即补写，已有 UA 一天更新一次 last_seen。
+     * 以本库记录为准，避免共享 / 残留 Redis 标记或缓存故障导致活动有哈希却没有字典。
+     * 数据库写入失败只记日志（活动行照常写，带哈希），同 UA 下次请求继续尝试补齐。
+     */
     private static function rememberUa(string $hash, string $ua, int $now): void
     {
-        $key = 'insider_guard_ua:' . $hash;
         try {
-            if (!Cache::add($key, 1, self::UA_SEEN_SECONDS)) return;
+            $lastSeen = DB::table('v2_insider_guard_ua')->where('ua_hash', $hash)->value('last_seen');
+            if ($lastSeen !== null && (int)$lastSeen > $now - self::UA_SEEN_SECONDS) return;
             DB::table('v2_insider_guard_ua')->upsert(
                 [['ua_hash' => $hash, 'ua' => $ua, 'first_seen' => $now, 'last_seen' => $now]],
                 ['ua_hash'],
                 ['last_seen']
             );
         } catch (\Throwable $e) {
-            self::forgetQuietly($key);
             self::logWriteError('InsiderGuard ua dictionary unavailable', $e);
         }
     }
