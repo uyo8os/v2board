@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\V1\Client;
 
 use App\Http\Controllers\Controller;
+use App\Services\InsiderGuardService;
 use App\Services\ServerService;
 use App\Services\UserService;
 use Illuminate\Http\Request;
@@ -14,11 +15,15 @@ class AppController extends Controller
     public function getConfig(Request $request)
     {
         $servers = [];
+        $decoy = false;
         $user = $request->user;
         $userService = new UserService();
-        if ($userService->isAvailable($user)) {
+        $available = $userService->isAvailable($user);
+        if ($available) {
             $serverService = new ServerService();
             $servers = $serverService->getAvailableServers($user);
+            $decoy = InsiderGuardService::isRestricted((int)$user->id);
+            if ($decoy) InsiderGuardService::applyDecoy($servers, (int)$user->id);
         }
         $defaultConfig = base_path() . '/resources/rules/app.clash.yaml';
         $customConfig = base_path() . '/resources/rules/custom.app.clash.yaml';
@@ -29,6 +34,7 @@ class AppController extends Controller
         }
         $proxy = [];
         $proxies = [];
+        $delivered = [];
 
         foreach ($servers as $item) {
             if ($item['type'] === 'shadowsocks'
@@ -41,17 +47,22 @@ class AppController extends Controller
             ) {
                 array_push($proxy, \App\Protocols\Clash::buildShadowsocks($user['uuid'], $item));
                 array_push($proxies, $item['name']);
+                $delivered[] = $item;
             }
             if ($item['type'] === 'vmess') {
                 array_push($proxy, \App\Protocols\Clash::buildVmess($user['uuid'], $item));
                 array_push($proxies, $item['name']);
+                $delivered[] = $item;
             }
             if ($item['type'] === 'trojan') {
                 array_push($proxy, \App\Protocols\Clash::buildTrojan($user['uuid'], $item));
                 array_push($proxies, $item['name']);
+                $delivered[] = $item;
             }
         }
 
+        // App 只记录本次实际生成配置的节点；假入口不记真实节点下发。
+        if ($available) InsiderGuardService::recordSubscribe($user, $request, $delivered, $decoy);
         $config['proxies'] = array_merge($config['proxies'] ? $config['proxies'] : [], $proxy);
         foreach ($config['proxy-groups'] as $k => $v) {
             $config['proxy-groups'][$k]['proxies'] = array_merge($config['proxy-groups'][$k]['proxies'], $proxies);

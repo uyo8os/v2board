@@ -7,6 +7,7 @@ use App\Protocols\General;
 use App\Protocols\Singbox\Singbox;
 use App\Protocols\Singbox\SingboxOld;
 use App\Protocols\ClashMeta;
+use App\Services\InsiderGuardService;
 use App\Services\ServerService;
 use App\Services\UserService;
 use App\Utils\Helper;
@@ -25,6 +26,10 @@ class ClientController extends Controller
         if ($userService->isAvailable($user)) {
             $serverService = new ServerService();
             $servers = $serverService->getAvailableServers($user);
+            $decoy = InsiderGuardService::isRestricted((int)$user->id);
+            if ($decoy) InsiderGuardService::applyDecoy($servers, (int)$user->id);
+            // 沿用可用节点集合的下发线索，在追加订阅信息节点及协议输出之前采集。
+            InsiderGuardService::recordSubscribe($user, $request, $servers, $decoy);
             if($flag) {
                 if (strpos($flag, 'sing') === false) {
                     $this->setSubscribeInfoToServers($servers, $user);

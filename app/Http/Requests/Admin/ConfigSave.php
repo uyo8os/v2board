@@ -126,6 +126,10 @@ class ConfigSave extends FormRequest
         'password_limit_count' => 'integer',
         'password_limit_expire' => 'integer',
         'show_active_sessions' => 'in:0,1',
+        // insider guard（风控中心）
+        'insider_guard_risk_threshold' => 'integer|min:1|max:50',
+        'insider_guard_retention_days' => 'integer|min:1|max:365',
+        'insider_guard_decoy_host' => ['nullable', 'string', 'max:253', 'regex:/^(\[[0-9A-Fa-f:.]*:[0-9A-Fa-f:.]*:[0-9A-Fa-f:.]*\]|[0-9A-Fa-f:.]*:[0-9A-Fa-f:.]*:[0-9A-Fa-f:.]*|\d{1,3}(?:\.\d{1,3}){3}|[A-Za-z0-9](?:[A-Za-z0-9\-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9\-]*[A-Za-z0-9])?)*)$/'],
     ];
     /**
      * Get the validation rules that apply to the request.
@@ -135,6 +139,15 @@ class ConfigSave extends FormRequest
     public function rules()
     {
         $rules = self::RULES;
+        // 形似 IP 的地址额外校验数值范围；域名沿用格式检查，不发起网络请求。
+        $rules['insider_guard_decoy_host'][] = function ($attribute, $value, $fail) {
+            if ($value === null || $value === '' || !is_string($value)) return;
+            $host = trim($value, '[]');
+            if ((strpos($host, ':') !== false || preg_match('/^\d{1,3}(\.\d{1,3}){3}$/', $host))
+                && !filter_var($host, FILTER_VALIDATE_IP)) {
+                $fail('假入口地址不是有效的 IP');
+            }
+        };
         $rules['ticket_image_upload_api_url'][] = function ($attribute, $value, $fail) {
             if ($value === null || is_array($value) || trim((string)$value) === '') {
                 return;

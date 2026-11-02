@@ -124,6 +124,17 @@ class AdminRoute
             $router->post('/user/delUser', 'V1\\Admin\\UserController@delUser');
             $router->post('/user/allDel', 'V1\\Admin\\UserController@allDel');
             $router->post('/user/setInviteUser', 'V1\\Admin\\UserController@setInviteUser');
+            // InsiderGuard（风控中心）
+            $router->get ('/insiderGuard/overview', 'V1\\Admin\\InsiderGuardController@overview');
+            $router->get ('/insiderGuard/users', 'V1\\Admin\\InsiderGuardController@users');
+            $router->get ('/insiderGuard/events', 'V1\\Admin\\InsiderGuardController@events');
+            $router->get ('/insiderGuard/userDetail', 'V1\\Admin\\InsiderGuardController@userDetail');
+            $router->post('/insiderGuard/review', 'V1\\Admin\\InsiderGuardController@review');
+            $router->post('/insiderGuard/restrict', 'V1\\Admin\\InsiderGuardController@restrict');
+            $router->post('/insiderGuard/release', 'V1\\Admin\\InsiderGuardController@release');
+            $router->post('/insiderGuard/nodeIncident', 'V1\\Admin\\InsiderGuardController@nodeIncident');
+            $router->get ('/insiderGuard/candidates', 'V1\\Admin\\InsiderGuardController@candidates');
+            $router->get ('/insiderGuard/timeline', 'V1\\Admin\\InsiderGuardController@timeline');
             // Stat
             $router->get ('/stat/getStat', 'V1\\Admin\\StatController@getStat');
             $router->get ('/stat/getOverride', 'V1\\Admin\\StatController@getOverride');

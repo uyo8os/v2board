@@ -172,6 +172,11 @@ class ConfigController extends Controller
                 'android_version' => config('v2board.android_version'),
                 'android_download_url' => config('v2board.android_download_url')
             ],
+            'insider_guard' => [
+                'insider_guard_risk_threshold' => (int)config('v2board.insider_guard_risk_threshold', 50),
+                'insider_guard_retention_days' => (int)config('v2board.insider_guard_retention_days', 3),
+                'insider_guard_decoy_host' => (string)config('v2board.insider_guard_decoy_host', '')
+            ],
             'safe' => [
                 'email_verify' => (int)config('v2board.email_verify', 0),
                 'safe_mode_enable' => (int)config('v2board.safe_mode_enable', 0),

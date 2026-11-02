@@ -11,6 +11,7 @@ use App\Models\InviteCode;
 use App\Models\Plan;
 use App\Models\User;
 use App\Services\AuthService;
+use App\Services\InsiderGuardService;
 use App\Utils\CacheKey;
 use App\Utils\Dict;
 use App\Utils\Helper;
@@ -194,6 +195,7 @@ class AuthController extends Controller
 
         $user->last_login_at = time();
         $user->save();
+        InsiderGuardService::recordLogin($user, $request);
 
         $authService = new AuthService($user);
         return response([
