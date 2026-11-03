@@ -6,6 +6,18 @@ use Linfo\Linfo;
 $lInfo = new Linfo();
 $parser = $lInfo->getParser();
 
+$insiderGuardAuditWorker = [
+    'connection' => 'redis',
+    'queue' => ['insider_guard_audit'],
+    'balance' => 'simple',
+    'processes' => 1,
+    'minProcesses' => 1,
+    'maxProcesses' => 1,
+    'tries' => 3,
+    'timeout' => 30,
+    'memory' => 128,
+];
+
 return [
 
     /*
@@ -89,6 +101,7 @@ return [
 
     'waits' => [
         'redis:default' => 60,
+        'redis:insider_guard_audit' => 60,
     ],
 
     /*
@@ -190,6 +203,9 @@ return [
                 'tries' => 1,
                 'balanceCooldown' => 3,
             ],
+            'InsiderGuardAudit' => $insiderGuardAuditWorker,
         ],
+        // Horizon 按顺序匹配环境；其他环境只补充审计消费者，不覆盖现有业务队列配置。
+        '*' => ['InsiderGuardAudit' => $insiderGuardAuditWorker],
     ],
 ];

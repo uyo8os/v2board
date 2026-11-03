@@ -44,6 +44,7 @@ class Kernel extends ConsoleKernel
         $schedule->command('speedlimit:cleanHistory')->daily();
         // insider guard（风控中心）
         $schedule->command('insider-guard:cleanup')->hourly()->withoutOverlapping(30);
+        $schedule->command('subscribe-audit:prune')->everyMinute()->withoutOverlapping(5);
         // send
         $schedule->command('send:remindMail')->dailyAt('11:30');
         // horizon metrics

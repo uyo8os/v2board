@@ -997,3 +997,26 @@ CREATE TABLE IF NOT EXISTS `v2_insider_guard_review` (
   PRIMARY KEY (`id`),
   KEY `user_id` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='风控中心：人工审核记录';
+
+/* InsiderGuard：精简的逐次订阅请求审计，独立于按小时合并的活动记录 */
+CREATE TABLE IF NOT EXISTS `v2_insider_guard_subscribe_audit` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `event_id` char(32) CHARACTER SET ascii NOT NULL,
+  `user_id` int(11) unsigned NOT NULL,
+  `email` varchar(64) NOT NULL DEFAULT '',
+  `source` varchar(16) CHARACTER SET ascii NOT NULL COMMENT 'subscription / app',
+  `ip_address` varchar(45) CHARACTER SET ascii NOT NULL DEFAULT '',
+  `ua` varchar(512) NOT NULL DEFAULT '',
+  `format` varchar(64) CHARACTER SET ascii NOT NULL DEFAULT '',
+  `result` varchar(16) CHARACTER SET ascii NOT NULL COMMENT 'success / unavailable / error',
+  `status` smallint(5) unsigned NOT NULL,
+  `duration_ms` int(10) unsigned NOT NULL DEFAULT 0,
+  `requested_at` int(10) unsigned NOT NULL,
+  `request_details` text DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `event_id` (`event_id`),
+  KEY `audit_time` (`requested_at`,`id`),
+  KEY `audit_user_time` (`user_id`,`requested_at`,`id`),
+  KEY `audit_ip_time` (`ip_address`,`requested_at`,`id`),
+  KEY `audit_result_time` (`result`,`requested_at`,`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='风控中心：逐次订阅和 App 配置请求，不保存订阅凭据或响应正文';

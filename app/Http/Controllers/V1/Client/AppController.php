@@ -14,6 +14,8 @@ class AppController extends Controller
 {
     public function getConfig(Request $request)
     {
+        $request->attributes->set('subscription_audit_format', 'Clash');
+        $request->attributes->set('subscription_audit_result', 'unavailable');
         $servers = [];
         $decoy = false;
         $user = $request->user;
@@ -23,6 +25,7 @@ class AppController extends Controller
             $serverService = new ServerService();
             $servers = $serverService->getAvailableServers($user);
             $decoy = InsiderGuardService::isRestricted((int)$user->id);
+            $request->attributes->set('subscription_audit_decoy', $decoy);
             if ($decoy) InsiderGuardService::applyDecoy($servers, (int)$user->id);
         }
         $defaultConfig = base_path() . '/resources/rules/app.clash.yaml';
@@ -63,11 +66,13 @@ class AppController extends Controller
 
         // App 只记录本次实际生成配置的节点；假入口不记真实节点下发。
         if ($available) InsiderGuardService::recordSubscribe($user, $request, $delivered, $decoy);
+        $request->attributes->set('subscription_audit_node_count', count($delivered));
         $config['proxies'] = array_merge($config['proxies'] ? $config['proxies'] : [], $proxy);
         foreach ($config['proxy-groups'] as $k => $v) {
             $config['proxy-groups'][$k]['proxies'] = array_merge($config['proxy-groups'][$k]['proxies'], $proxies);
         }
         $yamlContent = Yaml::dump($config);
+        if ($available) $request->attributes->set('subscription_audit_result', 'success');
         return response($yamlContent, 200)
             ->header('Content-Type', 'text/yaml');
     }

@@ -175,6 +175,9 @@ class ConfigController extends Controller
             'insider_guard' => [
                 'insider_guard_risk_threshold' => (int)config('v2board.insider_guard_risk_threshold', 50),
                 'insider_guard_retention_days' => (int)config('v2board.insider_guard_retention_days', 3),
+                'insider_guard_subscribe_audit_enabled' => (int)config('v2board.insider_guard_subscribe_audit_enabled', 1),
+                'insider_guard_subscribe_audit_retention_days' => (int)config('v2board.insider_guard_subscribe_audit_retention_days', 3),
+                'insider_guard_subscribe_audit_max_records' => (int)config('v2board.insider_guard_subscribe_audit_max_records', 100000),
                 'insider_guard_decoy_host' => (string)config('v2board.insider_guard_decoy_host', '')
             ],
             'safe' => [

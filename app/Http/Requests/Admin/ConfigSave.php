@@ -129,6 +129,9 @@ class ConfigSave extends FormRequest
         // insider guard（风控中心）
         'insider_guard_risk_threshold' => 'integer|min:1|max:50',
         'insider_guard_retention_days' => 'integer|min:1|max:365',
+        'insider_guard_subscribe_audit_enabled' => 'in:0,1',
+        'insider_guard_subscribe_audit_retention_days' => 'integer|min:1|max:365',
+        'insider_guard_subscribe_audit_max_records' => 'integer|min:1|max:1000000',
         'insider_guard_decoy_host' => ['nullable', 'string', 'max:253', 'regex:/^(\[[0-9A-Fa-f:.]*:[0-9A-Fa-f:.]*:[0-9A-Fa-f:.]*\]|[0-9A-Fa-f:.]*:[0-9A-Fa-f:.]*:[0-9A-Fa-f:.]*|\d{1,3}(?:\.\d{1,3}){3}|[A-Za-z0-9](?:[A-Za-z0-9\-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9\-]*[A-Za-z0-9])?)*)$/'],
     ];
     /**

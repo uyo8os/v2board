@@ -135,6 +135,9 @@ class AdminRoute
             $router->post('/insiderGuard/nodeIncident', 'V1\\Admin\\InsiderGuardController@nodeIncident');
             $router->get ('/insiderGuard/candidates', 'V1\\Admin\\InsiderGuardController@candidates');
             $router->get ('/insiderGuard/timeline', 'V1\\Admin\\InsiderGuardController@timeline');
+            $router->get ('/insiderGuard/subscribeAudit', 'V1\\Admin\\SubscriptionAuditController@fetch');
+            $router->get ('/insiderGuard/subscribeAuditStats', 'V1\\Admin\\SubscriptionAuditController@stats');
+            $router->get ('/insiderGuard/subscribeAuditDetail', 'V1\\Admin\\SubscriptionAuditController@detail');
             // Stat
             $router->get ('/stat/getStat', 'V1\\Admin\\StatController@getStat');
             $router->get ('/stat/getOverride', 'V1\\Admin\\StatController@getOverride');

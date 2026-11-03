@@ -17,6 +17,7 @@ class ClientController extends Controller
 {
     public function subscribe(Request $request)
     {
+        $request->attributes->set('subscription_audit_result', 'unavailable');
         $flag = $request->input('flag')
             ?? ($_SERVER['HTTP_USER_AGENT'] ?? '');
         $flag = strtolower($flag);
@@ -26,7 +27,9 @@ class ClientController extends Controller
         if ($userService->isAvailable($user)) {
             $serverService = new ServerService();
             $servers = $serverService->getAvailableServers($user);
+            $request->attributes->set('subscription_audit_node_count', count($servers));
             $decoy = InsiderGuardService::isRestricted((int)$user->id);
+            $request->attributes->set('subscription_audit_decoy', $decoy);
             if ($decoy) InsiderGuardService::applyDecoy($servers, (int)$user->id);
             // 沿用可用节点集合的下发线索，在追加订阅信息节点及协议输出之前采集。
             InsiderGuardService::recordSubscribe($user, $request, $servers, $decoy);
@@ -37,7 +40,7 @@ class ClientController extends Controller
                         $file = 'App\\Protocols\\' . basename($file, '.php');
                         $class = new $file($user, $servers);
                         if (strpos($flag, $class->flag) !== false) {
-                            return $class->handle();
+                            return $this->renderSubscription($request, $class);
                         }
                     }
                 }
@@ -51,12 +54,20 @@ class ClientController extends Controller
                     } else {
                         $class = new SingboxOld($user, $servers);
                     }
-                    return $class->handle();
+                    return $this->renderSubscription($request, $class);
                 }
             }
             $class = new General($user, $servers);
-            return $class->handle();
+            return $this->renderSubscription($request, $class);
         }
+    }
+
+    private function renderSubscription(Request $request, $protocol)
+    {
+        $request->attributes->set('subscription_audit_format', class_basename($protocol));
+        $content = $protocol->handle();
+        $request->attributes->set('subscription_audit_result', 'success');
+        return $content;
     }
 
     private function setSubscribeInfoToServers(&$servers, $user)
