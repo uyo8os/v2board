@@ -1,0 +1,15 @@
+# 分支变更记录
+
+按日期简要记录本分支的变更，详细更新日志放在 [changelog](changelog/) 目录。
+
+## 2026 年 11 月 04 日
+
+修复安装、Composer 依赖安装与更新、数据库升级和运行兼容问题，升级至 Laravel 13 并适配 PHP 8.4，保留原有业务功能。完成 Docker 安装、升级及运行验收，补充宝塔安装和从 `master` 迁移到 `fix` 的更新文档。
+
+本次具体修改见 [更新日志](changelog/2026-11-03-installation-dependencies-upgrade-fixes.md)。
+
+## 2026 年 11 月 03 日
+
+新增风控中心和订阅与 App 配置的逐次审计，支持筛选、统计和自动清理；修复风控 UA 字典缺失时未能及时补齐的问题。
+
+本次具体修改见 [更新日志](changelog/2026-11-03-subscription-audit-and-ua-dictionary-fixes.md)。
