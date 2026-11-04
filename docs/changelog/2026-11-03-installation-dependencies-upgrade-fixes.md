@@ -20,6 +20,29 @@
 
 本次升级框架的直接原因是：在 PHP 8.4 容器中保留 Composer 安全检查时，原 Laravel 8 与 Symfony YAML 4 的依赖约束被安全公告阻止解析。最终采用 Laravel 13，并实际验证其与 MySQL 5.7、Redis 7.4 的运行组合。
 
+对照升级前的 `composer.json` 和本次新增的 `composer.lock`，依赖调整如下：
+
+| 依赖 | 本次处理 | 当前锁定版本 |
+|---|---|---|
+| `laravel/horizon` | 保留 `^5.9.6` 约束，重新解析并锁定 | **5.50.1** |
+| `laravel/tinker` | `^2.5` → `^3.0` | **3.0.2** |
+| `stripe/stripe-php` | 保留 `^v14.9.0` 约束 | **14.10.1** |
+| `guzzlehttp/guzzle` | 保留 `^7.4.3` 约束 | **7.16.1** |
+| `php-curl-class/php-curl-class` | 保留 `^8.6` 约束 | **8.10.0** |
+| `rybakit/msgpack` | 保留 `^0.9.1` 约束 | **0.9.2** |
+| `paragonie/sodium_compat` | 保留 `^1.20` 约束 | **1.24.2** |
+| `symfony/yaml` | `^4.3` → `^7.4` | **7.4.22** |
+| `firebase/php-jwt` | `^6.3@stable \|\| ^7.0` → `^7.0` | **7.2.1** |
+| `google/recaptcha` | 保留 `^1.2` 约束 | **1.5.2** |
+| `fideloper/proxy` | 删除 `^4.4` 依赖，改用 Laravel 内置可信代理中间件 | — |
+| `facade/ignition` | 删除 `^2.3.6` 依赖 | — |
+| `nunomaduro/collision` | `^4.3` → `^8.0` | **8.9.5** |
+| `phpunit/phpunit` | `^9.0` → `^12.0` | **12.5.43** |
+
+以上版本取自本次提交的锁文件。升级前的仓库没有提交 `composer.lock`，因此无法确认旧服务器实际安装的版本，不能把“保留约束”直接理解为“没有升级”。
+
+兼容性遗留：`facade/ignition` 已删除，但 `app/Exceptions/Handler.php` 仍引用其 `ViewException`，原有“主题渲染失败”提示尚未适配 Laravel 内置视图异常。
+
 ### 二、全新安装修复
 
 - 重写 `init.sh`，固定从项目目录执行，并在命令失败时立即停止，避免依赖安装失败后继续导入数据库。
