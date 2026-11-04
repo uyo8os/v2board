@@ -27,29 +27,25 @@
 
 ## 原版迁移步骤
 
-按以下步骤进行面板代码文件迁移：
+从原来的 `master` 升级到 `fix`，请按 [更新文档](docs/update.md)完成备份、进入维护模式和 PHP 环境切换，再同步 `origin/fix`，执行新版 `bash update.sh --local`。不要继续使用会强制重置到 `master` 的旧更新脚本。
 
-    git remote set-url origin https://github.com/uyo8os/v2board  
-    git checkout master  
-    ./update.sh  
+保留原数据库、`.env` 和 `APP_KEY`，使用 Redis 缓存与队列。更新成功后重启 PHP，启动 Horizon 和已启用的 Webman；确认 `php artisan horizon:status` 正常后执行 `php artisan up`，恢复网站和计划任务，再进入后台保存原主题。自带主题为 `default`。
 
+## 安装、更新与 Docker 验收
 
-按以下步骤配置缓存驱动为redis，然后刷新设置缓存，重启队列:
+本分支使用 PHP 8.4、Laravel 13 和配套的 `composer.lock`。Laravel 8 与 YAML 4 的依赖已被 Composer 安全公告阻断；本次保留现有应用结构、JWT / 会话认证、业务数据表及前端，完成必要的框架兼容修复。
 
-    sed -i 's/^CACHE_DRIVER=.*/CACHE_DRIVER=redis/' .env
-    php artisan config:clear
-    php artisan config:cache
-    php artisan horizon:terminate
+全新安装使用 `sh init.sh`，已有站点使用 `sh update.sh`，更新会跟随**当前分支的 upstream**（包括 `fix`），拒绝覆盖有修改的跟踪文件。已经手动同步代码时使用 `sh update.sh --local`。部署脚本安装锁文件中的生产依赖，任何 Composer / 平台 / 安全检查失败都会停止；开发时的依赖更新使用 `composer update` 并提交对应锁文件。
 
-最后进入后台重新保存主题： 主题配置-选择default主题-主题设置-确定保存
+本次具体修改见 [更新日志](docs/changelog/2026-11-03-installation-dependencies-upgrade-fixes.md)。aaPanel / 宝塔部署见 [安装文档](docs/install.md)和 [更新文档](docs/update.md)，Docker 测试命令见 [安装与升级说明](docker/README.md)，实测结果见 [验收记录](docker/ACCEPTANCE.md)。
 
 # **V2Board**
 
-- PHP7.3+
-- Composer
-- MySQL5.5+
-- Redis
-- Laravel
+- PHP 8.4（Linux，CLI 和 PHP-FPM 使用相同扩展）
+- Composer 2.11（安全检查保持默认开启）
+- MySQL 5.7+
+- Redis 7.4
+- Laravel 13
 
 ## Document
 [Click](https://v2board.com)
