@@ -8,6 +8,8 @@
 
 本次具体修改见 [更新日志](changelog/2026-11-03-installation-dependencies-upgrade-fixes.md)。
 
+修复 `route:list` 查看路由时触发 HTTP 请求校验而报错的问题，详见 [路由命令修复日志](changelog/2026-11-04-route-list-compatibility-fix.md)。
+
 ## 2026 年 11 月 03 日
 
 新增风控中心和订阅与 App 配置的逐次审计，支持筛选、统计和自动清理；修复风控 UA 字典缺失时未能及时补齐的问题。

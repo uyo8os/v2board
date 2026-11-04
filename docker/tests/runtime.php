@@ -4,6 +4,7 @@ require '/app/vendor/autoload.php';
 $app = require '/app/bootstrap/app.php';
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;
 
@@ -28,9 +29,19 @@ function http(string $base, string $path, string $method = 'GET', array $data = 
     return $body;
 }
 
+$routeStatus = Artisan::call('route:list', ['--json' => true]);
+$routes = json_decode(Artisan::output(), true, 512, JSON_THROW_ON_ERROR);
+verify($routeStatus === 0 && count($routes) > 100, 'route:list enumerates the application without HTTP request tokens');
+verify(in_array('api/v1/guest/telegram/webhook', array_column($routes, 'uri'), true), 'route:list includes the Telegram webhook');
+verify(count(array_filter($routes, static fn ($route) => in_array(
+    Laravel\Horizon\Http\Middleware\Authenticate::class, $route['middleware'], true
+))) > 0, 'route:list preserves Horizon controller authentication metadata');
+
 foreach (['PHP-FPM' => 'http://nginx', 'Workerman' => 'http://nginx:81'] as $name => $base) {
     verify(str_contains(http($base, '/'), '<!DOCTYPE html>'), "$name renders the original user interface");
     verify(isset(json_decode(http($base, '/api/v1/guest/comm/config'), true)['data']), "$name returns guest configuration");
+    http($base, '/api/v1/guest/telegram/webhook', 'POST', ['access_token' => 'acceptance-invalid-token'], expected: 401);
+    verify(true, "$name still rejects invalid Telegram webhook tokens");
     http($base, '/api/v1/user/info', expected: 403);
     $tokens = [];
     foreach ([2, 3] as $id) {

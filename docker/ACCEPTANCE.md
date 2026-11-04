@@ -66,3 +66,14 @@ ALL INSTALLATION, UPGRADE AND RUNTIME CHECKS PASSED
 ```
 
 本地验收使用现有数据库结构的测试数据及旧包缓存夹具，没有安装已被 Composer 安全阻断的 Laravel 8 依赖。邮件使用日志传输；外部支付网关、真实 SMTP / Telegram、真实服务器配置及真实数据备份恢复不在本次本地验收范围内。实际部署按 [安装与升级说明](README.md) 备份、升级并重启长驻服务。
+
+## 2026-11-04：路由查看命令补充回归
+
+在同一个隔离 Compose 项目中复现 `route:list` 的 `HttpException`，调用栈指向 Telegram 控制器构造函数的请求校验。加入命令兼容修复后：
+
+- 普通列表和 JSON 输出成功，验收环境中列出 220 条路由，并保留 Horizon 认证中间件信息。
+- PHPUnit 全部通过：**80 tests, 419 assertions**，其中新增 3 项路由命令回归测试。
+- PHP-FPM 与 Workerman 的 Telegram Webhook 无效令牌请求均返回 401，未向 Telegram 发起外部请求。
+- 更新后的运行验收脚本通过，原登录、JWT、订阅、订单、流量、邮件日志传输及审计任务均正常，失败任务数为 0。
+
+此轮同步修复文件和测试至已有验收卷，未重新执行全新安装、Composer 安装 / 更新或数据库升级。修复范围与命令显示限制见 [更新日志](../docs/changelog/2026-11-04-route-list-compatibility-fix.md)。
