@@ -1,0 +1,79 @@
+name: v2board-fix-acceptance
+
+x-app: &app
+  image: v2board-fix-php:8.4
+  build:
+    context: ..
+    dockerfile: docker/Dockerfile
+  working_dir: /app
+  volumes:
+    - app:/app
+    - ..:/source:ro
+    - composer:/composer
+  environment: &environment
+    DB_HOST: mysql
+    DB_DATABASE: v2board
+    DB_USERNAME: v2board
+    DB_PASSWORD: acceptance-password
+    REDIS_HOST: redis
+    APP_ENV: production
+    MAIL_DRIVER: log
+    MAIL_FROM_ADDRESS: noreply@example.test
+    MAIL_FROM_NAME: Acceptance
+    HORIZON_MAX_PROCESSES: 2
+    WEBMAN_LISTEN: http://0.0.0.0:6600
+    WEBMAN_WORKERS: 2
+  depends_on:
+    mysql:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  php-fpm:
+    <<: *app
+  workerman:
+    <<: *app
+    command: [php, -c, cli-php.ini, webman.php, start]
+  horizon:
+    <<: *app
+    command: [php, artisan, horizon]
+  test:
+    <<: *app
+    profiles: [tools]
+    command: [sh]
+  nginx:
+    image: nginx:1.30.6
+    volumes:
+      - app:/app:ro
+      - ./nginx.test.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - 127.0.0.1:${V2BOARD_TEST_HTTP_PORT:-18880}:80
+      - 127.0.0.1:${V2BOARD_TEST_WORKER_PORT:-18881}:81
+    depends_on: [php-fpm, workerman]
+  mysql:
+    image: mysql:5.7.44
+    environment:
+      MYSQL_ROOT_PASSWORD: acceptance-root-password
+      MYSQL_DATABASE: v2board
+      MYSQL_USER: v2board
+      MYSQL_PASSWORD: acceptance-password
+    volumes:
+      - mysql:/var/lib/mysql
+    healthcheck:
+      test: [CMD-SHELL, 'MYSQL_PWD=$$MYSQL_ROOT_PASSWORD mysql -h127.0.0.1 -uroot -e "SELECT 1"']
+      interval: 3s
+      timeout: 3s
+      retries: 40
+  redis:
+    image: redis:7.4.8-bookworm
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  app:
+  composer:
+  mysql:

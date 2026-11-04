@@ -6,6 +6,7 @@ use Illuminate\Console\Command;
 use Illuminate\Encryption\Encrypter;
 use App\Models\User;
 use App\Utils\Helper;
+use App\Utils\SqlFile;
 use Illuminate\Support\Facades\DB;
 
 class V2boardInstall extends Command
@@ -15,7 +16,7 @@ class V2boardInstall extends Command
      *
      * @var string
      */
-    protected $signature = 'v2board:install';
+    protected $signature = 'v2board:install {--email= : 管理员邮箱（自动安装时必填）}';
 
     /**
      * The console command description.
@@ -47,54 +48,44 @@ class V2boardInstall extends Command
             $this->info(" \ \ / /  __) |  _ \ / _ \ / _` | '__/ _` | ");
             $this->info("  \ V /  / __/| |_) | (_) | (_| | | | (_| | ");
             $this->info("   \_/  |_____|____/ \___/ \__,_|_|  \__,_| ");
-            if (\File::exists(base_path() . '/.env')) {
-                $securePath = config('v2board.secure_path', config('v2board.frontend_admin_path', hash('crc32b', config('app.key'))));
-                $this->info("访问 http(s)://你的站点/{$securePath} 进入管理面板，你可以在用户中心修改你的密码。");
-                abort(500, '如需重新安装请删除目录下.env文件');
-            }
-
-            if (!copy(base_path() . '/.env.example', base_path() . '/.env')) {
+            if (!file_exists(base_path('.env')) && !copy(base_path('.env.example'), base_path('.env'))) {
                 abort(500, '复制环境文件失败，请检查目录权限');
             }
-            $this->saveToEnv([
-                'APP_KEY' => 'base64:' . base64_encode(Encrypter::generateKey('AES-256-CBC')),
-                'DB_HOST' => $this->ask('请输入数据库地址（默认:localhost）', 'localhost'),
-                'DB_DATABASE' => $this->ask('请输入数据库名'),
-                'DB_USERNAME' => $this->ask('请输入数据库用户名'),
-                'DB_PASSWORD' => $this->ask('请输入数据库密码')
-            ]);
-            \Artisan::call('config:clear');
-            \Artisan::call('config:cache');
-            try {
-                DB::connection()->getPdo();
-            } catch (\Exception $e) {
-                abort(500, '数据库连接失败');
+            $interactive = $this->input->isInteractive();
+            $database = config('database.connections.mysql');
+            $data = [
+                'DB_HOST' => $interactive ? $this->ask('请输入数据库地址', $database['host']) : $database['host'],
+                'DB_PORT' => $interactive ? $this->ask('请输入数据库端口', $database['port']) : $database['port'],
+                'DB_DATABASE' => $interactive ? $this->ask('请输入数据库名', $database['database']) : $database['database'],
+                'DB_USERNAME' => $interactive ? $this->ask('请输入数据库用户名', $database['username']) : $database['username'],
+                'DB_PASSWORD' => $interactive ? $this->secret('请输入数据库密码') : $database['password'],
+            ];
+            $email = $this->option('email') ?: ($interactive ? $this->ask('请输入管理员邮箱?') : '');
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) abort(500, '请提供有效的管理员邮箱（--email）');
+            foreach (['host', 'port', 'database', 'username', 'password'] as $key) {
+                config(['database.connections.mysql.' . $key => $data['DB_' . strtoupper($key)]]);
             }
+            DB::purge('mysql');
+            $connection = DB::connection('mysql');
+            $connection->getPdo();
+            if ($connection->select('SHOW TABLES')) abort(500, '数据库非空，拒绝覆盖；已有站点请执行 v2board:update');
+            $data['APP_KEY'] = config('app.key') ?: 'base64:' . base64_encode(Encrypter::generateKey('AES-256-CBC'));
+            $this->saveToEnv($data);
+            config(['app.key' => $data['APP_KEY']]);
             $file = \File::get(base_path() . '/database/install.sql');
             if (!$file) {
                 abort(500, '数据库文件不存在');
             }
-            $sql = str_replace("\n", "", $file);
-            $sql = preg_split("/;/", $sql);
-            if (!is_array($sql)) {
-                abort(500, '数据库文件格式有误');
-            }
             $this->info('正在导入数据库请稍等...');
-            foreach ($sql as $item) {
-                try {
-                    DB::select(DB::raw($item));
-                } catch (\Exception $e) {
-                }
+            foreach (SqlFile::statements($file) as $item) {
+                $connection->unprepared($item);
             }
             $this->info('数据库导入完成');
-            $email = '';
-            while (!$email) {
-                $email = $this->ask('请输入管理员邮箱?');
-            }
             $password = Helper::guid(false);
             if (!$this->registerAdmin($email, $password)) {
                 abort(500, '管理员账号注册失败，请重试');
             }
+            if ($this->call('config:cache') !== 0) return self::FAILURE;
 
             $this->info('一切就绪');
             $this->info("管理员邮箱：{$email}");
@@ -102,8 +93,10 @@ class V2boardInstall extends Command
 
             $defaultSecurePath = hash('crc32b', config('app.key'));
             $this->info("访问 http(s)://你的站点/{$defaultSecurePath} 进入管理面板，你可以在用户中心修改你的密码。");
-        } catch (\Exception $e) {
+            return self::SUCCESS;
+        } catch (\Throwable $e) {
             $this->error($e->getMessage());
+            return self::FAILURE;
         }
     }
 
@@ -123,33 +116,17 @@ class V2boardInstall extends Command
 
     private function saveToEnv($data = [])
     {
-        function set_env_var($key, $value)
-        {
-            if (! is_bool(strpos($value, ' '))) {
-                $value = '"' . $value . '"';
-            }
-            $key = strtoupper($key);
-
-            $envPath = app()->environmentFilePath();
-            $contents = file_get_contents($envPath);
-
-            preg_match("/^{$key}=[^\r\n]*/m", $contents, $matches);
-
-            $oldValue = count($matches) ? $matches[0] : '';
-
-            if ($oldValue) {
-                $contents = str_replace("{$oldValue}", "{$key}={$value}", $contents);
-            } else {
-                $contents = $contents . "\n{$key}={$value}\n";
-            }
-
-            $file = fopen($envPath, 'w');
-            fwrite($file, $contents);
-            return fclose($file);
-        }
+        $envPath = app()->environmentFilePath();
+        $contents = file_get_contents($envPath);
         foreach($data as $key => $value) {
-            set_env_var($key, $value);
+            $value = str_replace(['\\', '"', '$', "\r", "\n"], ['\\\\', '\\"', '\\$', '\\r', '\\n'], (string)$value);
+            $line = $key . '="' . $value . '"';
+            $pattern = '/^' . preg_quote($key, '/') . '=[^\r\n]*/m';
+            $contents = preg_match($pattern, $contents)
+                ? preg_replace_callback($pattern, static fn () => $line, $contents)
+                : $contents . "\n" . $line . "\n";
         }
+        if (file_put_contents($envPath, $contents, LOCK_EX) === false) abort(500, '保存环境文件失败');
         return true;
     }
 }

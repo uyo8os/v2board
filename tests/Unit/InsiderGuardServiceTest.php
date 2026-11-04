@@ -2,6 +2,8 @@
 
 namespace Tests\Unit;
 
+use PHPUnit\Framework\Attributes\DataProvider;
+
 use App\Models\User;
 use App\Services\InsiderGuardService;
 use Illuminate\Database\Query\Builder;
@@ -26,7 +28,7 @@ class InsiderGuardServiceTest extends TestCase
         ]);
     }
 
-    /** @dataProvider scoreCases */
+    #[DataProvider('scoreCases')]
     public function testScoreChangesOnlyAfterPullAndIpThresholds(int $pulls, int $ips, int $expected): void
     {
         $this->assertSame($expected, InsiderGuardService::calcScore($pulls, $ips));
@@ -66,7 +68,7 @@ class InsiderGuardServiceTest extends TestCase
         $this->assertNotSame($host, InsiderGuardService::decoyHost(42));
     }
 
-    /** @dataProvider customHostCases */
+    #[DataProvider('customHostCases')]
     public function testCustomDecoyHostIsAppliedToNodes(string $configured, string $expected): void
     {
         config(['v2board.insider_guard_decoy_host' => $configured]);
@@ -176,7 +178,7 @@ class InsiderGuardServiceTest extends TestCase
         $this->assertFalse(InsiderGuardService::isRestricted(42));
     }
 
-    /** @dataProvider loggerFailureCases */
+    #[DataProvider('loggerFailureCases')]
     public function testRestrictionLookupFailureRefusesConfigurationWith503(bool $loggerFails): void
     {
         DB::shouldReceive('table')->with('v2_insider_guard_restrict')->once()
@@ -203,7 +205,7 @@ class InsiderGuardServiceTest extends TestCase
         ];
     }
 
-    /** @dataProvider loggerFailureCases */
+    #[DataProvider('loggerFailureCases')]
     public function testLoginAndSubscriptionAuditFailuresDoNotInterruptTheCaller(bool $loggerFails): void
     {
         if (!function_exists('mb_substr') || !function_exists('mb_convert_encoding')) {

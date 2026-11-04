@@ -205,7 +205,21 @@ return [
             ],
             'InsiderGuardAudit' => $insiderGuardAuditWorker,
         ],
-        // Horizon 按顺序匹配环境；其他环境只补充审计消费者，不覆盖现有业务队列配置。
-        '*' => ['InsiderGuardAudit' => $insiderGuardAuditWorker],
+        // Production must consume the original business queues as well as audit jobs.
+        '*' => [
+            'V2board' => [
+                'connection' => 'redis',
+                'queue' => ['order_handle', 'traffic_fetch', 'stat', 'speed_limit', 'send_email', 'send_email_mass', 'send_telegram'],
+                'balance' => 'auto',
+                'minProcesses' => 1,
+                'maxProcesses' => max(1, min(
+                    (int)ceil($parser->getRam()['total'] / 1024 / 1024 / 1024 * 6),
+                    (int)env('HORIZON_MAX_PROCESSES', 128)
+                )),
+                'tries' => 1,
+                'balanceCooldown' => 3,
+            ],
+            'InsiderGuardAudit' => $insiderGuardAuditWorker,
+        ],
     ],
 ];

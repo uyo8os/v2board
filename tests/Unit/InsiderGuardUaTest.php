@@ -2,6 +2,8 @@
 
 namespace Tests\Unit;
 
+use PHPUnit\Framework\Attributes\DataProvider;
+
 use App\Models\User;
 use App\Services\InsiderGuardService;
 use Illuminate\Database\Query\Builder;
@@ -20,7 +22,7 @@ class InsiderGuardUaTest extends TestCase
 {
     private const UA = 'InsiderGuard regression client/1.0';
 
-    /** @dataProvider legacyCacheCases */
+    #[DataProvider('legacyCacheCases')]
     public function testLoginRepairsMissingUaEvenWhenTheLegacyCacheMarkerExistsOrRedisFails(bool $cacheFails): void
     {
         $this->requireMbstring();
@@ -88,7 +90,7 @@ class InsiderGuardUaTest extends TestCase
         $this->assertSame(2, $attempts);
     }
 
-    /** @dataProvider refreshBoundaryCases */
+    #[DataProvider('refreshBoundaryCases')]
     public function testDictionaryRefreshUsesADailyBoundaryAndPreservesFirstSeen(int $age, bool $shouldWrite): void
     {
         $now = 1750000000;

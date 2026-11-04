@@ -903,7 +903,7 @@ CHANGE `period` `trigger_period` int(11) NOT NULL COMMENT '触发时间窗口，
 ALTER TABLE `v2_speed_limit_rule`
 ADD `limit_duration` int(11) NOT NULL DEFAULT '3600' COMMENT '限速时长，单位秒，触发后经过该时长自动解除' AFTER `speed_limit`;
 
-TRUNCATE TABLE `v2_speed_limit_record`;
+/* Preserve existing speed-limit records when applying or repeating upgrades. */
 
 ALTER TABLE `v2_speed_limit_record`
 ADD `release_at` int(11) DEFAULT NULL COMMENT '计划自动解除时间=触发时间+limit_duration' AFTER `triggered_at`,
@@ -913,7 +913,7 @@ ADD INDEX `released_at` (`released_at`);
 ALTER TABLE `v2_speed_limit_rule`
 ADD `disconnect_existing_connections` tinyint(1) NOT NULL DEFAULT '0' COMMENT '触发时是否强制打断该用户在选中节点上已建立的连接' AFTER `limit_duration`;
 
-TRUNCATE TABLE `v2_speed_limit_record`;
+/* No data reset is needed for the following additive rule fields. */
 
 ALTER TABLE `v2_speed_limit_rule`
 ADD `plan_limit_enabled` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否仅对所选订阅生效' AFTER `name`;

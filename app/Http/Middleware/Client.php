@@ -72,9 +72,8 @@ class Client
         if (!$user) {
             abort(403, 'token is error');
         }
-        $request->merge([
-            'user' => $user
-        ]);
+        // Symfony input bags accept request data only; keep the model in the resolver.
+        $request->setUserResolver(static fn () => $user);
         return $next($request);
     }
 }

@@ -1,34 +1,35 @@
-#!/bin/bash
+#!/bin/sh
+set -eu
+cd "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 
-if [ ! -d ".git" ]; then
-  echo "Please deploy using Git."
-  exit 1
-fi
+case "${1:-}" in
+    --local) shift ;;
+    '')
+        command -v git >/dev/null 2>&1 || { echo 'Git is required.' >&2; exit 1; }
+        git rev-parse --is-inside-work-tree >/dev/null
+        if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+            echo 'Tracked files have local changes. Commit or save them before updating.' >&2
+            exit 1
+        fi
+        # Follow the current branch's upstream, including fix; never reset local work.
+        upstream=$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}')
+        remote=$(git config --get "branch.$(git branch --show-current).remote")
+        git fetch "$remote"
+        git merge --ff-only "$upstream"
+        exec sh ./update.sh --local
+        ;;
+    *) echo 'Usage: sh update.sh [--local]' >&2; exit 1 ;;
+esac
 
-if ! command -v git &> /dev/null; then
-    echo "Git is not installed! Please install git and try again."
-    exit 1
-fi
+[ -f .env ] || { echo '.env is missing. Install the project first.' >&2; exit 1; }
+. ./scripts/composer.sh
 
-git config --global --add safe.directory $(pwd)
-git fetch --all && git reset --hard origin/master && git pull origin master
-rm -rf composer.lock composer.phar
-wget https://github.com/composer/composer/releases/latest/download/composer.phar -O composer.phar
-php composer.phar update -vvv
-
-php_main_version=$(php -v | head -n 1 | cut -d ' ' -f 2 | cut -d '.' -f 1)
-if [ $php_main_version -ge 8 ]; then
-    php composer.phar require joanhey/adapterman
-    if ! php -m | grep -q "pcntl"; then
-        echo "Adding pcntl extension to cli-php.ini"
-        sed -i '/extension=redis.so/a extension=pcntl.so' cli-php.ini
-    fi
-    php -c cli-php.ini webman.php stop
-    echo "Webman stopped.Please restart it by yourself."
-fi
-
+# Discard manifests that may reference providers removed by a major update.
+rm -f bootstrap/cache/config.php bootstrap/cache/services.php bootstrap/cache/packages.php
+install_dependencies
 php artisan v2board:update
 
-if [ -f "/etc/init.d/bt" ]; then
-  chown -R www $(pwd);
+if [ -f /etc/init.d/bt ]; then
+    chown -R www storage bootstrap/cache
 fi
+echo 'Reload PHP-FPM and restart the Workerman service to load the updated code.'

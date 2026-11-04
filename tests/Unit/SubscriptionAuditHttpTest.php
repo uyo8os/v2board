@@ -2,6 +2,8 @@
 
 namespace Tests\Unit;
 
+use PHPUnit\Framework\Attributes\DataProvider;
+
 use App\Http\Controllers\V1\Admin\SubscriptionAuditController;
 use App\Http\Middleware\SubscriptionAudit;
 use App\Http\Requests\Admin\SubscriptionAuditDetail;
@@ -123,7 +125,7 @@ class SubscriptionAuditHttpTest extends SubscriptionAuditTestCase
         $this->assertStringNotContainsString('current-secret', json_encode($stored));
     }
 
-    /** @dataProvider missingDetailCases */
+    #[DataProvider('missingDetailCases')]
     public function testMissingOrMalformedDetailsReturnNullWithTheCurrentLink($details): void
     {
         config(['v2board.show_subscribe_method' => 0, 'v2board.subscribe_url' => 'https://current.example.test']);
@@ -138,7 +140,7 @@ class SubscriptionAuditHttpTest extends SubscriptionAuditTestCase
 
     public static function missingDetailCases(): array
     {
-        return [['request_details' => null], ['request_details' => 'invalid-json'], ['request_details' => '{}']];
+        return [[null], ['invalid-json'], ['{}']];
     }
 
     public function testValidDetailsNormalizeAnEmptyQueryToAnObject(): void
@@ -155,7 +157,7 @@ class SubscriptionAuditHttpTest extends SubscriptionAuditTestCase
         $this->assertInstanceOf(\stdClass::class, $details->query);
     }
 
-    /** @dataProvider invalidFilters */
+    #[DataProvider('invalidFilters')]
     public function testInvalidFiltersAreRejectedBeforeQueries(array $filters): void
     {
         $this->expectException(ValidationException::class);
@@ -279,9 +281,9 @@ class SubscriptionAuditHttpTest extends SubscriptionAuditTestCase
             'REMOTE_ADDR' => '198.51.100.7', 'HTTP_USER_AGENT' => 'Client persistent-secret user-secret-uuid',
             'HTTP_AUTHORIZATION' => 'authorization-secret',
         ]);
-        $request->merge(['user' => (object)[
+        $request->setUserResolver(static fn () => (object)[
             'id' => 7, 'email' => 'audit@example.test', 'token' => 'persistent-secret', 'uuid' => 'user-secret-uuid',
-        ]]);
+        ]);
         return $request;
     }
 }

@@ -11,7 +11,7 @@ class v2RayTun
     private $user;
     private $options;
 
-    public function __construct($user, $servers, array $options = null)
+    public function __construct($user, $servers, ?array $options = null)
     {
         $this->user = $user;
         $this->servers = $servers;

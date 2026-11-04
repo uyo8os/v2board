@@ -1,42 +1,10 @@
 <?php
 
-namespace Tests;
+require dirname(__DIR__) . '/vendor/autoload.php';
 
-use Illuminate\Contracts\Console\Kernel;
-use PHPUnit\Runner\AfterLastTestHook;
-use PHPUnit\Runner\BeforeFirstTestHook;
-
-class Bootstrap implements BeforeFirstTestHook, AfterLastTestHook
-{
-    /*
-    |--------------------------------------------------------------------------
-    | Bootstrap The Test Environment
-    |--------------------------------------------------------------------------
-    |
-    | You may specify console commands that execute once before your test is
-    | run. You are free to add your own additional commands or logic into
-    | this file as needed in order to help your test suite run quicker.
-    |
-    */
-
-    use CreatesApplication;
-
-    public function executeBeforeFirstTest(): void
-    {
-        $console = $this->createApplication()->make(Kernel::class);
-
-        $commands = [
-            'config:cache',
-            'event:cache',
-        ];
-
-        foreach ($commands as $command) {
-            $console->call($command);
-        }
+// Keep test caches separate from the site's production config and package files.
+register_shutdown_function(static function () {
+    foreach (glob(dirname(__DIR__) . '/bootstrap/cache/*.phpunit.php') as $file) {
+        unlink($file);
     }
-
-    public function executeAfterLastTest(): void
-    {
-        array_map('unlink', glob('bootstrap/cache/*.phpunit.php'));
-    }
-}
+});

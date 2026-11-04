@@ -10,7 +10,7 @@ class Singbox
     private $user;
     private $config;
 
-    public function __construct($user, $servers, array $options = null)
+    public function __construct($user, $servers, ?array $options = null)
     {
         $this->user = $user;
         $this->servers = $servers;

@@ -21,7 +21,7 @@ class ClientController extends Controller
         $flag = $request->input('flag')
             ?? ($_SERVER['HTTP_USER_AGENT'] ?? '');
         $flag = strtolower($flag);
-        $user = $request->user;
+        $user = $request->user();
         // account not expired and is not banned.
         $userService = new UserService();
         if ($userService->isAvailable($user)) {

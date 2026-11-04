@@ -18,7 +18,7 @@ class AppController extends Controller
         $request->attributes->set('subscription_audit_result', 'unavailable');
         $servers = [];
         $decoy = false;
-        $user = $request->user;
+        $user = $request->user();
         $userService = new UserService();
         $available = $userService->isAvailable($user);
         if ($available) {

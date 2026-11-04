@@ -2,6 +2,8 @@
 
 namespace Tests\Unit;
 
+use PHPUnit\Framework\Attributes\DataProvider;
+
 use App\Services\SubscriptionAuditRequest;
 use Illuminate\Http\Request;
 use PHPUnit\Framework\TestCase;
@@ -52,7 +54,7 @@ class SubscriptionAuditRequestTest extends TestCase
         }
     }
 
-    /** @dataProvider unsafeFlags */
+    #[DataProvider('unsafeFlags')]
     public function testArbitraryFlagValuesAndArraysAreNotPersisted($flag): void
     {
         $request = Request::create('/subscribe', 'GET', ['flag' => $flag, 'version' => 'private-value']);

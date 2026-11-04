@@ -12,7 +12,7 @@ class SubscriptionAudit
 {
     public function handle(Request $request, Closure $next, $source = 'subscription')
     {
-        $user = $request->user;
+        $user = $request->user();
         if (!$user || !$user->id) return $next($request);
         $started = microtime(true);
         try {

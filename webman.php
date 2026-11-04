@@ -14,8 +14,8 @@ Adapterman::init();
 
 $ncpu = substr_count((string)@file_get_contents('/proc/cpuinfo'), "\nprocessor")+1;
 
-$http_worker                = new Worker('http://127.0.0.1:6600');
-$http_worker->count         = $ncpu * 2;
+$http_worker                = new Worker(getenv('WEBMAN_LISTEN') ?: 'http://127.0.0.1:6600');
+$http_worker->count         = max(1, (int)(getenv('WEBMAN_WORKERS') ?: $ncpu * 2));
 $http_worker->name          = 'AdapterMan';
 
 $http_worker->onWorkerStart = static function () {

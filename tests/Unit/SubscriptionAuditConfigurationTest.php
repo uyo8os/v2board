@@ -2,6 +2,8 @@
 
 namespace Tests\Unit;
 
+use PHPUnit\Framework\Attributes\DataProvider;
+
 use App\Http\Requests\Admin\ConfigSave;
 use Illuminate\Translation\ArrayLoader;
 use Illuminate\Translation\Translator;
@@ -10,7 +12,7 @@ use PHPUnit\Framework\TestCase;
 
 class SubscriptionAuditConfigurationTest extends TestCase
 {
-    /** @dataProvider settingCases */
+    #[DataProvider('settingCases')]
     public function testAuditSettingsAreValidatedBeforeSaving(array $values, bool $expected): void
     {
         $validator = new Factory(new Translator(new ArrayLoader(), 'en'));
