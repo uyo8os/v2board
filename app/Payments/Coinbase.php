@@ -96,7 +96,7 @@ class Coinbase {
             $ch, CURLOPT_HTTPHEADER, array('X-CC-Api-Key:' .$this->config['coinbase_api_key'], 'X-CC-Version: 2018-03-22')
         );
         $result = curl_exec($ch);
-        curl_close($ch);
+        unset($ch);
         return $result;
     }
 

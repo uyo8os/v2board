@@ -96,7 +96,7 @@ class LocalCaptchaService
 
         ob_start();
         imagepng($image);
-        imagedestroy($image);
+        unset($image);
         return (string)ob_get_clean();
     }
 

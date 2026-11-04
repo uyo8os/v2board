@@ -9,6 +9,11 @@ use Stripe\Source;
 use Stripe\Stripe;
 
 class StripeCredit {
+    // Preserve the API contract used by stripe-php 14.10.1 while updating the SDK.
+    private const STRIPE_API_VERSION = '2024-04-10';
+
+    public array $config;
+
     public function __construct($config)
     {
         $this->config = $config;
@@ -59,7 +64,7 @@ class StripeCredit {
                     'out_trade_no' => $order['trade_no'],
                     'identifier' => ''
                 ]
-            ]);
+            ], ['stripe_version' => self::STRIPE_API_VERSION]);
         } catch (\Exception $e) {
             info($e);
             abort(500, __('Payment failed. Please check your credit card information'));
@@ -79,10 +84,10 @@ class StripeCredit {
         try {
             $event = \Stripe\Webhook::constructEvent(
                 request()->getContent() ?: json_encode($_POST),
-                $_SERVER['HTTP_STRIPE_SIGNATURE'],
+                $_SERVER['HTTP_STRIPE_SIGNATURE'] ?? '',
                 $this->config['stripe_webhook_key']
             );
-        } catch (\Stripe\Error\SignatureVerification $e) {
+        } catch (\Stripe\Exception\SignatureVerificationException | \UnexpectedValueException $e) {
             abort(400);
         }
         switch ($event->type) {
@@ -92,8 +97,8 @@ class StripeCredit {
                     'amount' => $object->amount,
                     'currency' => $object->currency,
                     'source' => $object->id,
-                    'metadata' => json_decode($object->metadata, true)
-                ]);
+                    'metadata' => $object->metadata->toArray()
+                ], ['stripe_version' => self::STRIPE_API_VERSION]);
                 break;
             case 'charge.succeeded':
                 $object = $event->data->object;
@@ -115,7 +120,7 @@ class StripeCredit {
         return('success');
     }
 
-    private function exchange($from, $to)
+    protected function exchange($from, $to)
     {
         $result = file_get_contents("https://api.exchangerate-api.com/v4/latest/{$from}");
         $result = json_decode($result, true);

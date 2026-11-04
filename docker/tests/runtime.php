@@ -4,6 +4,12 @@ require '/app/vendor/autoload.php';
 $app = require '/app/bootstrap/app.php';
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 
+// Standalone acceptance scripts must return a failing status for every exception.
+set_exception_handler(static function (Throwable $exception): void {
+    fwrite(STDERR, (string)$exception . PHP_EOL);
+    exit(1);
+});
+
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;

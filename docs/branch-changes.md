@@ -10,6 +10,8 @@
 
 修复 `route:list` 查看路由时触发 HTTP 请求校验而报错的问题，详见 [路由命令修复日志](changelog/2026-11-04-route-list-compatibility-fix.md)。
 
+升级 Stripe、Guzzle、Curl、MessagePack、Sodium、reCAPTCHA、YAML 和 PHPUnit 等依赖，补齐支付及主题异常兼容修复，详见 [依赖升级日志](changelog/2026-11-04-dependency-updates.md)。
+
 ## 2026 年 11 月 03 日
 
 新增风控中心和订阅与 App 配置的逐次审计，支持筛选、统计和自动清理；修复风控 UA 字典缺失时未能及时补齐的问题。

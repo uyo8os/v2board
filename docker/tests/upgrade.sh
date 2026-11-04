@@ -67,5 +67,5 @@ composer install --no-interaction --prefer-dist --no-ansi > storage/logs/compose
 composer update --no-interaction --prefer-dist --no-ansi > storage/logs/composer-update-test.log 2>&1
 composer check-platform-reqs
 composer audit
-vendor/bin/phpunit --no-progress --colors=never
+vendor/bin/phpunit --no-progress --colors=never --fail-on-deprecation --fail-on-warning
 chown -R www-data:www-data storage bootstrap/cache config/theme

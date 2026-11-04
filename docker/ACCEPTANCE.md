@@ -77,3 +77,42 @@ ALL INSTALLATION, UPGRADE AND RUNTIME CHECKS PASSED
 - 更新后的运行验收脚本通过，原登录、JWT、订阅、订单、流量、邮件日志传输及审计任务均正常，失败任务数为 0。
 
 此轮同步修复文件和测试至已有验收卷，未重新执行全新安装、Composer 安装 / 更新或数据库升级。修复范围与命令显示限制见 [更新日志](../docs/changelog/2026-11-04-route-list-compatibility-fix.md)。
+
+## 2026-11-04：依赖升级与 PHP 8.5 完整验收
+
+使用最终代码及锁文件，在两个全新的 Compose 项目中重新执行 `docker/tests/run.sh`：
+
+| 项目 | PHP | PHP-FPM / Workerman 入口端口 |
+| --- | --- | --- |
+| `v2board-dependency-verified84` | 8.4.27 | 18894 / 18895 |
+| `v2board-dependency-verified85` | 8.5.12 | 18896 / 18897 |
+
+两组均使用 Laravel **13.40.0**、Composer **2.11.1**、Nginx **1.30.6**、MySQL **5.7.44**、Redis **7.4.8**、phpredis **6.3.0**。PHP 8.5 通过 `V2BOARD_TEST_PHP_VERSION=8.5` 选择；复现方式见 [安装与升级说明](README.md)。
+
+| 验证项目 | PHP 8.4 | PHP 8.5 |
+| --- | --- | --- |
+| 全新安装及管理员生成 | 通过 | 通过 |
+| Composer install / update / 平台检查 / 安全审计 | 通过 | 通过 |
+| Git 分支更新、重复升级 | 通过 | 通过 |
+| 用户、余额、佣金、订单、节点、限制记录、APP_KEY、站点配置保留 | 通过 | 通过 |
+| 非空库拒绝重装、本地修改阻断、SQL / Composer 失败路径 | 通过 | 通过 |
+| PHPUnit，遇到弃用或警告判失败 | 101 tests / 604 assertions | 101 tests / 604 assertions |
+| Nginx / PHP-FPM / Workerman / Horizon | 通过 | 通过 |
+| 登录、JWT、用户隔离、订阅、App 配置、节点接口、PNG 验证码 | 通过 | 通过 |
+| 下单扣余额、队列续费、流量、邮件日志传输、审计任务 | 通过 | 通过 |
+| 失败队列任务 | 0 | 0 |
+| 服务日志中的 Warning / Deprecated / Fatal / Uncaught | 无 | 无 |
+
+两组 `composer outdated --direct --format=json` 均返回空列表，没有可更新的直接依赖。Composer 更新后的锁文件与仓库相同，SHA-256 为 `b4fb32148ff02a8f8653d64da233382deb108d4fe7899d0bb1e30cd43364696b`。
+
+本轮同时修正了验收脚本的两个问题：独立 PHP 脚本抛出异常后明确返回非零状态；快照比较先按字段名排序，再严格比较字段值和类型，避免历史 SQL 调整列顺序造成误报。两组均额外验证未知夹具阶段返回状态 **1**。
+
+原始完整输出保存在未跟踪的 `.docker-test/dependencies-verified84.log`、`.docker-test/dependencies-verified85.log`；安装及升级阶段日志位于各自隔离应用卷的 `storage/logs`。两个完整脚本均返回 **0**，并输出：
+
+```text
+OK (101 tests, 604 assertions)
+ALL RUNTIME ACCEPTANCE CHECKS PASSED
+ALL INSTALLATION, UPGRADE AND RUNTIME CHECKS PASSED
+```
+
+支付新增回归使用离线模拟：覆盖五个 Stripe 渠道的请求及验签、Curl 支付请求与 Telegram 参数，不联系真实网关。未执行真实支付、退款、SMTP 或 Telegram 发送；保留旧 Stripe Sources 渠道不代表解除其服务端停用或账户限制。完整版本对照和兼容修复见 [依赖升级日志](../docs/changelog/2026-11-04-dependency-updates.md)。

@@ -1,10 +1,13 @@
 <?php
 
 use Illuminate\Support\Str;
-use Linfo\Linfo;
 
-$lInfo = new Linfo();
-$parser = $lInfo->getParser();
+$memoryBasedProcesses = 1;
+$memoryInfo = is_readable('/proc/meminfo') ? @file_get_contents('/proc/meminfo') : false;
+if (is_string($memoryInfo) && preg_match('/^MemTotal:\s+(\d+)\s+kB$/m', $memoryInfo, $matches) && (int)$matches[1] > 0) {
+    $memoryBasedProcesses = (int)ceil((int)$matches[1] / 1024 / 1024 * 6);
+}
+$maxProcesses = max(1, min($memoryBasedProcesses, (int)env('HORIZON_MAX_PROCESSES', 128)));
 
 $insiderGuardAuditWorker = [
     'connection' => 'redis',
@@ -196,10 +199,7 @@ return [
                 ],
                 'balance' => 'auto',
                 'minProcesses' => 1,
-                'maxProcesses' => min(
-                    (int)ceil($parser->getRam()['total'] / 1024 / 1024 / 1024 * 6),
-                    (int)env('HORIZON_MAX_PROCESSES', 128)
-                ),
+                'maxProcesses' => $maxProcesses,
                 'tries' => 1,
                 'balanceCooldown' => 3,
             ],
@@ -212,10 +212,7 @@ return [
                 'queue' => ['order_handle', 'traffic_fetch', 'stat', 'speed_limit', 'send_email', 'send_email_mass', 'send_telegram'],
                 'balance' => 'auto',
                 'minProcesses' => 1,
-                'maxProcesses' => max(1, min(
-                    (int)ceil($parser->getRam()['total'] / 1024 / 1024 / 1024 * 6),
-                    (int)env('HORIZON_MAX_PROCESSES', 128)
-                )),
+                'maxProcesses' => $maxProcesses,
                 'tries' => 1,
                 'balanceCooldown' => 3,
             ],

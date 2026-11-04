@@ -147,7 +147,7 @@ class PaytaroQR
         $body = curl_exec($ch);
         $errno = curl_errno($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        unset($ch);
         if ($errno || $body === false) {
             abort(500, 'Paytaro 网络异常，请稍后重试');
         }

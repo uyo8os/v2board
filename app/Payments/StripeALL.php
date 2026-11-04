@@ -5,6 +5,11 @@ use Stripe\Stripe;
 use App\Models\User;
 
 class StripeALL {
+    // Preserve the API contract used by stripe-php 14.10.1 while updating the SDK.
+    private const STRIPE_API_VERSION = '2024-04-10';
+
+    public array $config;
+
     public function __construct($config)
     {
         $this->config = $config;
@@ -41,12 +46,15 @@ class StripeALL {
         $currency = $this->config['currency'];
         $exchange = $this->exchange('CNY', strtoupper($currency));
         if (!$exchange) {
-            throw new abort('Currency conversion API failed', 500);
+            abort(500, 'Currency conversion API failed');
         }
         //jump url
         $jumpUrl = null;
         $actionType = 0;
-        $stripe = new \Stripe\StripeClient($this->config['stripe_sk_live']);
+        $stripe = new \Stripe\StripeClient([
+            'api_key' => $this->config['stripe_sk_live'],
+            'stripe_version' => self::STRIPE_API_VERSION,
+        ]);
         // 获取用户邮箱
         $userEmail = $this->getUserEmail($order['user_id']);
         if ($this->config['payment_method'] != "cards"){
@@ -83,7 +91,7 @@ class StripeALL {
         $nextAction = null;
         
         if (!$stripeIntents['next_action']) {
-            throw new abort(__('Payment gateway request failed'));
+            abort(500, __('Payment gateway request failed'));
         }else {
             $nextAction = $stripeIntents['next_action'];
         }
@@ -94,14 +102,14 @@ class StripeALL {
                     $jumpUrl = $nextAction['alipay_handle_redirect']['url'];
                     $actionType = 1;
                 }else {
-                    throw new abort('unable get Alipay redirect url', 500);
+                    abort(500, 'unable get Alipay redirect url');
                 }
                 break;
             case "wechat_pay":
                 if (isset($nextAction['wechat_pay_display_qr_code'])){
                     $jumpUrl = $nextAction['wechat_pay_display_qr_code']['data'];
                 }else {
-                    throw new abort('unable get WeChat Pay redirect url', 500);
+                    abort(500, 'unable get WeChat Pay redirect url');
                 }
         }
     } else {
@@ -141,10 +149,10 @@ class StripeALL {
         try {
             $event = \Stripe\Webhook::constructEvent(
                 request()->getContent() ?: json_encode($_POST),
-                $_SERVER['HTTP_STRIPE_SIGNATURE'],
+                $_SERVER['HTTP_STRIPE_SIGNATURE'] ?? '',
                 $this->config['stripe_webhook_key']
             );
-        } catch (\Stripe\Error\SignatureVerification $e) {
+        } catch (\Stripe\Exception\SignatureVerificationException | \UnexpectedValueException $e) {
             abort(400);
         }
         switch ($event->type) {
@@ -179,12 +187,12 @@ class StripeALL {
                     ];
                     break;
             default:
-                throw new abort('webhook events are not supported');
+                abort(500, 'webhook events are not supported');
         }
         return('success');
     }
     // 货币转换 API
-    private function exchange($from, $to)
+    protected function exchange($from, $to)
     {
         try {
             $url = "https://api.exchangerate-api.com/v4/latest/{$from}";
@@ -223,7 +231,7 @@ class StripeALL {
         }
     }
     // 从user中获取email
-    private function getUserEmail($userId)
+    protected function getUserEmail($userId)
     {
         $user = User::find($userId);
         return $user ? $user->email : null;

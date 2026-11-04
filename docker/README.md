@@ -1,6 +1,6 @@
 # 安装与升级
 
-运行目标为 Linux、PHP 8.4、Nginx、MySQL 5.7、Redis 7.4。Horizon / Workerman 需要 CLI 的 `pcntl`、`posix` 扩展；同时需要 `bcmath`、`curl`、`mbstring`、`pdo_mysql`、`redis`，以及框架依赖要求的 DOM / XML 等扩展。Dockerfile 包含完整测试环境；CLI 和 FPM 的 PHP 版本及扩展应一致。
+运行目标为 64 位 Linux、PHP 8.4.1+（兼容 8.x）、Nginx、MySQL 5.7、Redis 7.4。Horizon / Workerman 需要 CLI 的 `pcntl`、`posix` 扩展；同时需要 `bcmath`、`curl`、`mbstring`、`pdo_mysql`、`redis`，以及框架依赖要求的 DOM / XML 等扩展。Dockerfile 包含完整测试环境；CLI 和 FPM 的 PHP 版本及扩展应一致。
 
 ## 全新安装
 
@@ -18,7 +18,7 @@ Workerman 可使用 `php -c cli-php.ini webman.php start`。该配置仅用于 W
 
 ## 已有站点升级
 
-升级前备份数据库、`.env`、`config/v2board.php` 及自定义主题，先确保 CLI / FPM 为 PHP 8.4，并使用 Composer 2.11。
+升级前备份数据库、`.env`、`config/v2board.php` 及自定义主题，先确保 CLI / FPM 满足 PHP 8.4.1+ 的要求，并使用 Composer 2.11。
 
 ```sh
 git branch --show-current
@@ -65,3 +65,11 @@ sh docker/tests/run.sh
 ```
 
 Windows 可在 Git Bash 执行上述命令。脚本保留测试容器和日志，日志位于应用数据卷的 `storage/logs`；测试管理员密码只保留在隔离卷的安装日志中。默认 FPM 入口为 `http://127.0.0.1:18880`，Workerman 入口为 `http://127.0.0.1:18881`。邮件使用日志传输，不联系外部邮箱；外部支付网关、真实 SMTP 和 Telegram 不在本地测试中发送请求。
+
+默认测试 PHP 8.4。测试 PHP 8.5 时，设置 `V2BOARD_TEST_PHP_VERSION=8.5`，并使用新的项目名和端口；例如在 Git Bash 执行：
+
+```sh
+V2BOARD_TEST_PHP_VERSION=8.5 COMPOSE_PROJECT_NAME=v2board-check85 \
+V2BOARD_TEST_HTTP_PORT=18886 V2BOARD_TEST_WORKER_PORT=18887 \
+sh docker/tests/run.sh
+```

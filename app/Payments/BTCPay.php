@@ -114,7 +114,7 @@ class BTCPay {
             $ch, CURLOPT_HTTPHEADER, array('Authorization:' .'token '.$this->config['btcpay_api_key'], 'Content-Type: application/json')
         );
         $result = curl_exec($ch);
-        curl_close($ch);
+        unset($ch);
         return $result;
     }
 

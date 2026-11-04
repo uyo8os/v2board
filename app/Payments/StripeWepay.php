@@ -9,6 +9,11 @@ use Stripe\Source;
 use Stripe\Stripe;
 
 class StripeWepay {
+    // Preserve the API contract used by stripe-php 14.10.1 while updating the SDK.
+    private const STRIPE_API_VERSION = '2024-04-10';
+
+    public array $config;
+
     public function __construct($config)
     {
         $this->config = $config;
@@ -56,7 +61,7 @@ class StripeWepay {
             'redirect' => [
                 'return_url' => $order['return_url']
             ]
-        ]);
+        ], ['stripe_version' => self::STRIPE_API_VERSION]);
         if (!$source['wechat']['qr_code_url']) {
             abort(500, __('Payment gateway request failed'));
         }
@@ -72,10 +77,10 @@ class StripeWepay {
         try {
             $event = \Stripe\Webhook::constructEvent(
                 request()->getContent() ?: json_encode($_POST),
-                $_SERVER['HTTP_STRIPE_SIGNATURE'],
+                $_SERVER['HTTP_STRIPE_SIGNATURE'] ?? '',
                 $this->config['stripe_webhook_key']
             );
-        } catch (\Stripe\Error\SignatureVerification $e) {
+        } catch (\Stripe\Exception\SignatureVerificationException | \UnexpectedValueException $e) {
             abort(400);
         }
         switch ($event->type) {
@@ -85,8 +90,8 @@ class StripeWepay {
                     'amount' => $object->amount,
                     'currency' => $object->currency,
                     'source' => $object->id,
-                    'metadata' => json_decode($object->metadata, true)
-                ]);
+                    'metadata' => $object->metadata->toArray()
+                ], ['stripe_version' => self::STRIPE_API_VERSION]);
                 break;
             case 'charge.succeeded':
                 $object = $event->data->object;
@@ -108,7 +113,7 @@ class StripeWepay {
         return('success');
     }
 
-    private function exchange($from, $to)
+    protected function exchange($from, $to)
     {
         $result = file_get_contents('https://api.exchangerate.host/latest?symbols=' . $to . '&base=' . $from);
         $result = json_decode($result, true);

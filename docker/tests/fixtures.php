@@ -4,6 +4,12 @@ require '/app/vendor/autoload.php';
 $app = require '/app/bootstrap/app.php';
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 
+// Standalone acceptance scripts must return a failing status for every exception.
+set_exception_handler(static function (Throwable $exception): void {
+    fwrite(STDERR, (string)$exception . PHP_EOL);
+    exit(1);
+});
+
 use Illuminate\Support\Facades\DB;
 
 function check($condition, string $message): void
@@ -19,6 +25,19 @@ function snapshot(): array
     foreach ($tables as $table) $data[$table] = DB::table($table)->orderByRaw('1')->get()->map(fn ($row) => (array)$row)->all();
     $data['key'] = config('app.key');
     $data['site'] = hash_file('sha256', '/app/config/v2board.php');
+    return $data;
+}
+
+function normalizeSnapshot(array $data): array
+{
+    // Historical ALTER statements can reorder columns without changing any values.
+    foreach ($data as $table => $rows) {
+        if (!is_array($rows)) continue;
+        $data[$table] = array_map(static function (array $row): array {
+            ksort($row);
+            return $row;
+        }, $rows);
+    }
     return $data;
 }
 
@@ -58,7 +77,7 @@ switch ($argv[1] ?? '') {
         echo "PASS: Existing users, balances, orders, nodes, restrictions and speed-limit history seeded\n";
         break;
     case 'preserved':
-        check(snapshot() === json_decode(file_get_contents('/app/storage/upgrade-before.json'), true), 'Upgrade preserves business records, APP_KEY and site configuration');
+        check(normalizeSnapshot(snapshot()) === normalizeSnapshot(json_decode(file_get_contents('/app/storage/upgrade-before.json'), true)), 'Upgrade preserves business records, APP_KEY and site configuration');
         break;
     case 'verify-queue':
         check(DB::table('v2_insider_guard_subscribe_audit')->where('source', 'subscription')->exists(), 'Horizon writes subscription audit jobs to MySQL');
