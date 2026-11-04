@@ -130,11 +130,50 @@ php artisan up
 
 更新脚本不会代替面板重启 PHP 或 Webman。Horizon 收到退出信号后，也需要 Supervisor 或手动操作将它重新拉起。
 
-## 6. 保存主题并检查更新结果
+## 6.手动验证（如 update.sh 失败）
+
+```
+# 安装依赖
+composer install --no-dev --optimize-autoloader
+
+# 清除缓存
+php artisan config:clear
+php artisan cache:clear
+php artisan view:clear
+php artisan route:clear
+
+# 重建缓存
+php artisan config:cache
+
+# 重启服务
+php artisan horizon:terminate
+systemctl restart php-fpm-85
+systemctl restart nginx
+```
+
+## 7. 保存主题并检查更新结果
 
 恢复网站后，进入后台「主题配置 → 选择原主题 → 主题设置 → 保存」。使用项目自带主题时选择 `default`；自定义主题继续选择原主题，并确认它与新版兼容。
 
 访问网站，检查登录、后台配置、订阅获取等功能是否正常，并确认订单、邮件等队列任务可以处理。
+
+## 8. 基础验证
+
+```
+# 验证 Laravel 版本
+php artisan --version
+# 预期输出：Laravel Framework 13.x.x
+
+# 验证路由数量
+php artisan route:list | wc -l
+# 预期：200+ 行
+# 如果不正常可执行一下命令查看错误
+/www/server/php/85/bin/php artisan route:list
+
+# 验证队列状态
+php artisan horizon:status
+# 预期：running
+```
 
 ## 常见问题
 
