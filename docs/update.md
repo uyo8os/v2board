@@ -111,6 +111,10 @@ php artisan horizon:status
 
 升级使用原数据库，不需要重新导入用户。脚本会按 `database/update.sql` 补齐尚未应用的历史变更，包括风控和订阅审计相关表。
 
+更新还会在维护模式下统一历史邮箱的首尾空格和 ASCII 大小写，并将 MySQL 邮箱列改为 `utf8mb4_bin`，防止数据库把不同重音字符当成同一邮箱。密码、订阅 token 和 UUID 不变。请按第 2 节暂停所有写入进程；未进入维护模式时更新命令会拒绝执行。
+
+可在更新前运行 `php artisan v2board:normalize-email` 进行只读检查。若多个账号规范化后相同，更新会在执行 SQL 前停止，并报告冲突用户 ID；请核实账号归属后分别修改邮箱，再重试，不会自动合并或覆盖账号。已有账号的历史大小写和空格在应用查询中仍有兼容处理。需要单独升级邮箱列时，在维护窗口执行 `php artisan v2board:normalize-email --apply`。
+
 ## 4. 刷新配置和队列
 
 确认 `.env` 中 Redis 连接正确，并使用：

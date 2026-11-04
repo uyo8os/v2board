@@ -6,6 +6,8 @@ use Illuminate\Foundation\Http\FormRequest;
 
 class AuthLogin extends FormRequest
 {
+    use \App\Http\Requests\Concerns\NormalizesEmail;
+
     /**
      * Get the validation rules that apply to the request.
      *
@@ -14,7 +16,7 @@ class AuthLogin extends FormRequest
     public function rules()
     {
         return [
-            'email' => 'required|email:strict',
+            'email' => 'required|string|email:strict|max:64',
             'password' => 'required|min:8',
             'recaptcha_data' => 'nullable|string|max:64',
             'captcha_key' => 'nullable|string|max:128',

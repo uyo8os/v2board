@@ -150,7 +150,7 @@ class UserController extends Controller
         if (!$user) {
             abort(500, '用户不存在');
         }
-        if (User::where('email', $params['email'])->first() && $user->email !== $params['email']) {
+        if (User::byEmail($params['email'])->where('id', '<>', $user->id)->exists()) {
             abort(500, '邮箱已被使用');
         }
         if (isset($params['password'])) {
@@ -169,7 +169,7 @@ class UserController extends Controller
             $params['group_id'] = null;
         }
         if ($request->input('invite_user_email')) {
-            $inviteUser = User::where('email', $request->input('invite_user_email'))->first();
+            $inviteUser = User::findByEmail($request->input('invite_user_email'));
             if ($inviteUser) {
                 $params['invite_user_id'] = $inviteUser->id;
             }
@@ -232,7 +232,7 @@ class UserController extends Controller
                 }
             }
             $user = [
-                'email' => $request->input('email_prefix') . '@' . $request->input('email_suffix'),
+                'email' => User::normalizeEmail($request->input('email_prefix') . '@' . $request->input('email_suffix')),
                 'plan_id' => isset($plan->id) ? $plan->id : NULL,
                 'group_id' => isset($plan->group_id) ? $plan->group_id : NULL,
                 'transfer_enable' => isset($plan->transfer_enable) ? $plan->transfer_enable * 1073741824 : 0,
@@ -241,7 +241,7 @@ class UserController extends Controller
                 'uuid' => Helper::guid(true),
                 'token' => Helper::guid()
             ];
-            if (User::where('email', $user['email'])->first()) {
+            if (User::findByEmail($user['email'])) {
                 abort(500, '邮箱已存在于系统中');
             }
             $user['password'] = password_hash($request->input('password') ?? $user['email'], PASSWORD_DEFAULT);
@@ -268,7 +268,7 @@ class UserController extends Controller
         $users = [];
         for ($i = 0;$i < $request->input('generate_count');$i++) {
             $user = [
-                'email' => Helper::randomChar(6) . '@' . $request->input('email_suffix'),
+                'email' => User::normalizeEmail(Helper::randomChar(6) . '@' . $request->input('email_suffix')),
                 'plan_id' => isset($plan->id) ? $plan->id : NULL,
                 'group_id' => isset($plan->group_id) ? $plan->group_id : NULL,
                 'transfer_enable' => isset($plan->transfer_enable) ? $plan->transfer_enable * 1073741824 : 0,

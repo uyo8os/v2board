@@ -70,13 +70,14 @@ class Helper
 
     public static function emailSuffixVerify($email, $suffixs)
     {
-        $suffix = preg_split('/@/', $email)[1];
-        if (!$suffix) return false;
+        if (!is_string($email)) return false;
+        $parts = explode('@', \App\Models\User::normalizeEmail($email));
+        if (count($parts) !== 2 || $parts[1] === '') return false;
         if (!is_array($suffixs)) {
             $suffixs = preg_split('/,/', $suffixs);
         }
-        if (!in_array($suffix, $suffixs)) return false;
-        return true;
+        $suffixs = array_map(static fn ($suffix) => strtolower(trim((string)$suffix)), $suffixs);
+        return in_array($parts[1], $suffixs, true);
     }
 
     public static function emailQqNumericOnlyVerify($email)

@@ -43,7 +43,7 @@ class TicketController extends Controller
             $model->whereIn('reply_status', $request->input('reply_status'));
         }
         if ($request->input('email') !== NULL) {
-            $user = User::where('email', $request->input('email'))->first();
+            $user = User::findByEmail($request->input('email'));
             if ($user) $model->where('user_id', $user->id);
         }
         $total = $model->count();

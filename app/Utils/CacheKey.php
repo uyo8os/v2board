@@ -47,6 +47,11 @@ class CacheKey
         if (!in_array($key, array_keys(self::KEYS))) {
             abort(500, 'key is not in cache key list');
         }
+        if (in_array($key, ['EMAIL_VERIFY_CODE', 'LAST_SEND_EMAIL_VERIFY_TIMESTAMP',
+            'PASSWORD_ERROR_LIMIT', 'FORGET_REQUEST_LIMIT', 'LAST_SEND_LOGIN_WITH_MAIL_LINK_TIMESTAMP'], true)
+            && is_string($uniqueValue)) {
+            $uniqueValue = \App\Models\User::normalizeEmail($uniqueValue);
+        }
         return $key . '_' . $uniqueValue;
     }
 }

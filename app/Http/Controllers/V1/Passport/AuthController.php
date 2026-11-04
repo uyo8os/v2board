@@ -17,6 +17,7 @@ use App\Utils\Dict;
 use App\Utils\Helper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Database\UniqueConstraintViolationException;
 use ReCaptcha\ReCaptcha;
 use App\Services\LocalCaptchaService;
 
@@ -67,8 +68,8 @@ class AuthController extends Controller
                 abort(500, __('You must use the invitation code to register'));
             }
         }
-        $email = $request->input('email');
-        $cacheKeyEmail = is_string($email) ? strtolower(trim($email)) : '';
+        $email = User::normalizeEmail($request->input('email'));
+        $cacheKeyEmail = $email;
         if ((int)config('v2board.email_verify', 0)) {
             $inputCode = $request->input('email_code');
             if (!is_string($inputCode) || !preg_match('/^\d{6}$/', $inputCode)) {
@@ -80,7 +81,7 @@ class AuthController extends Controller
             }
         }
         $password = $request->input('password');
-        $exist = User::where('email', $email)->first();
+        $exist = User::findByEmail($email);
         if ($exist) {
             abort(500, __('Email already exists'));
         }
@@ -119,8 +120,11 @@ class AuthController extends Controller
             }
         }
 
-        if (!$user->save()) {
-            abort(500, __('Register failed'));
+        try {
+            if (!$user->save()) abort(500, __('Register failed'));
+        } catch (UniqueConstraintViolationException $e) {
+            // A concurrent registration must still respect the unique email index.
+            abort(500, __('Email already exists'));
         }
         if ((int)config('v2board.email_verify', 0)) {
             Cache::forget(CacheKey::get('EMAIL_VERIFY_CODE', $cacheKeyEmail));
@@ -146,7 +150,7 @@ class AuthController extends Controller
 
     public function login(AuthLogin $request)
     {
-        $email = $request->input('email');
+        $email = User::normalizeEmail($request->input('email'));
         $password = $request->input('password');
 
         if ((int)config('v2board.password_limit_enable', 1)) {
@@ -158,7 +162,7 @@ class AuthController extends Controller
             }
         }
 
-        $user = User::where('email', $email)->first();
+        $user = User::findByEmail($email);
         $loginCaptchaEnabled = (int)config('v2board.login_captcha_enable', 0)
             && (!$user || !(int)$user->is_admin);
 
@@ -179,7 +183,7 @@ class AuthController extends Controller
             $password,
             $user->password)
         ) {
-            if ((int)config('v2board.password_limit_enable')) {
+            if ((int)config('v2board.password_limit_enable', 1)) {
                 Cache::put(
                     CacheKey::get('PASSWORD_ERROR_LIMIT', $email),
                     (int)$passwordErrorCount + 1,
@@ -273,7 +277,8 @@ class AuthController extends Controller
             abort(500, __('Incorrect email verification code'));
         }
 
-        $cacheKeyEmail         = strtolower(trim($email));
+        $email = User::normalizeEmail($email);
+        $cacheKeyEmail         = $email;
         $forgetRequestLimitKey = CacheKey::get('FORGET_REQUEST_LIMIT', $cacheKeyEmail);
         $forgetRequestLimit    = (int)Cache::get($forgetRequestLimitKey);
         if ($forgetRequestLimit >= 3) {
@@ -285,12 +290,12 @@ class AuthController extends Controller
             Cache::put($forgetRequestLimitKey, $forgetRequestLimit + 1, 300);
             abort(500, __('Incorrect email verification code'));
         }
-        $user = User::where('email', $email)->first();
+        $user = User::findByEmail($email);
         if (!$user) {
             abort(500, __('This email is not registered in the system'));
         }
         // 数据库排序规则会把 á/a 等视为相等，必须按字节确认是同一个邮箱
-        if (strtolower($user->email) !== $cacheKeyEmail) {
+        if (User::normalizeEmail($user->email) !== $cacheKeyEmail) {
             abort(500, __('Incorrect email verification code'));
         }
         $user->password      = password_hash($password, PASSWORD_DEFAULT);

@@ -6,6 +6,8 @@ use Illuminate\Foundation\Http\FormRequest;
 
 class AuthForget extends FormRequest
 {
+    use \App\Http\Requests\Concerns\NormalizesEmail;
+
     /**
      * Get the validation rules that apply to the request.
      *

@@ -6,6 +6,8 @@ use Illuminate\Foundation\Http\FormRequest;
 
 class OrderAssign extends FormRequest
 {
+    use \App\Http\Requests\Concerns\NormalizesEmail;
+
     /**
      * Get the validation rules that apply to the request.
      *
@@ -15,7 +17,7 @@ class OrderAssign extends FormRequest
     {
         return [
             'plan_id' => 'required',
-            'email' => 'required',
+            'email' => 'required|string|email:strict|max:64',
             'total_amount' => 'required',
             'period' => 'required|in:month_price,quarter_price,half_year_price,year_price,two_year_price,three_year_price,onetime_price,reset_price'
         ];

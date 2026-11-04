@@ -42,7 +42,7 @@ class ResetPassword extends Command
      */
     public function handle()
     {
-        $user = User::where('email', $this->argument('email'))->first();
+        $user = User::findByEmail($this->argument('email'));
         if (!$user) abort(500, '邮箱不存在');
         $password = Helper::guid(false);
         $user->password = password_hash($password, PASSWORD_DEFAULT);

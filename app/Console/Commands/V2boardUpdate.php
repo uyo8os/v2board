@@ -6,6 +6,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Database\QueryException;
 use App\Utils\SqlFile;
+use App\Services\EmailIdentityService;
 
 class V2boardUpdate extends Command
 {
@@ -45,6 +46,17 @@ class V2boardUpdate extends Command
             return self::FAILURE;
         }
         DB::connection()->getPdo();
+        // Preflight identities before any cumulative SQL or data update.
+        $emailService = new EmailIdentityService();
+        $emailReport = $emailService->inspect();
+        if ($emailReport['conflicts']) {
+            $this->error('邮箱规范化存在冲突，请先处理用户 ID：' . json_encode($emailReport['conflicts']));
+            return self::FAILURE;
+        }
+        if (!app()->isDownForMaintenance()) {
+            $this->error('请先进入维护模式，并暂停计划任务、Horizon 和 Webman 等写入进程。');
+            return self::FAILURE;
+        }
         $file = \File::get(base_path() . '/database/update.sql');
         if (!$file) {
             abort(500, '数据库文件不存在');
@@ -70,6 +82,7 @@ class V2boardUpdate extends Command
                 }
             }
         }
+        if ($this->call('v2board:normalize-email', ['--apply' => true]) !== 0) return self::FAILURE;
         if ($this->call('config:cache') !== 0 || $this->call('horizon:terminate') !== 0) return self::FAILURE;
         $this->info('更新完毕；Horizon 已收到退出信号，请确保进程守护会自动拉起队列。');
         return self::SUCCESS;

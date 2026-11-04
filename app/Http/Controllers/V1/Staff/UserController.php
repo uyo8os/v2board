@@ -34,7 +34,7 @@ class UserController extends Controller
         if (!$user) {
             abort(500, '用户不存在');
         }
-        if (User::where('email', $params['email'])->first() && $user->email !== $params['email']) {
+        if (User::byEmail($params['email'])->where('id', '<>', $user->id)->exists()) {
             abort(500, '邮箱已被使用');
         }
         if (isset($params['password'])) {

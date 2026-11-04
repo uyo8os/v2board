@@ -6,6 +6,8 @@ use Illuminate\Foundation\Http\FormRequest;
 
 class UserUpdate extends FormRequest
 {
+    use \App\Http\Requests\Concerns\NormalizesEmail;
+
     /**
      * Get the validation rules that apply to the request.
      *
@@ -14,7 +16,7 @@ class UserUpdate extends FormRequest
     public function rules()
     {
         return [
-            'email' => 'required|email:strict',
+            'email' => 'required|string|email:strict|max:64|regex:/^[\x21-\x7E]+$/',
             'password' => 'nullable',
             'transfer_enable' => 'numeric',
             'device_limit' => 'nullable|integer',

@@ -41,7 +41,7 @@ class CommController extends Controller
         }
         RateLimiter::hit($ip, 60);
 
-        $email = $request->input('email');
+        $email = User::normalizeEmail($request->input('email'));
         $isforget = $request->input('isforget');
         if ((int)$isforget === 0
             && (int)config('v2board.email_qq_numeric_only', 0)
@@ -58,8 +58,8 @@ class CommController extends Controller
                 abort(500, __('Invalid code is incorrect'));
             }
         }
-        $cacheKeyEmail = strtolower(trim((string)$email));
-        $email_exists = User::where('email', $email)->exists();
+        $cacheKeyEmail = $email;
+        $email_exists = User::findByEmail($email) !== null;
         //检查是否在白名单内
         if ((int)config('v2board.email_whitelist_enable', 0)) {
             if (!Helper::emailSuffixVerify(

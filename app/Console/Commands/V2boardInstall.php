@@ -60,8 +60,9 @@ class V2boardInstall extends Command
                 'DB_USERNAME' => $interactive ? $this->ask('请输入数据库用户名', $database['username']) : $database['username'],
                 'DB_PASSWORD' => $interactive ? $this->secret('请输入数据库密码') : $database['password'],
             ];
-            $email = $this->option('email') ?: ($interactive ? $this->ask('请输入管理员邮箱?') : '');
-            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) abort(500, '请提供有效的管理员邮箱（--email）');
+            $email = User::normalizeEmail($this->option('email') ?: ($interactive ? $this->ask('请输入管理员邮箱?') : ''));
+            if (strlen($email) > 64 || !preg_match('/^[\x21-\x7E]+$/', $email)
+                || !filter_var($email, FILTER_VALIDATE_EMAIL)) abort(500, '请提供有效的管理员邮箱（--email）');
             foreach (['host', 'port', 'database', 'username', 'password'] as $key) {
                 config(['database.connections.mysql.' . $key => $data['DB_' . strtoupper($key)]]);
             }
