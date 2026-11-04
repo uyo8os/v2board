@@ -104,7 +104,8 @@ php artisan horizon:status
 
 - 同步代码；使用 `--local` 时跳过这一步。
 - 按 `composer.lock` 安装依赖，检查 PHP、扩展和依赖安全公告。
-- 执行数据库更新。
+- 自动检查历史邮箱规范化冲突；有冲突则停止，不执行后续数据库变更。
+- 执行数据库更新，并规范化历史邮箱、更新邮箱列排序规则。
 - 重新生成配置缓存，并通知 Horizon 退出。
 
 脚本已经处理依赖和配置缓存，不需要额外执行 `composer update` 或重复运行数据库更新命令。
@@ -113,7 +114,11 @@ php artisan horizon:status
 
 更新还会在维护模式下统一历史邮箱的首尾空格和 ASCII 大小写，并将 MySQL 邮箱列改为 `utf8mb4_bin`，防止数据库把不同重音字符当成同一邮箱。密码、订阅 token 和 UUID 不变。请按第 2 节暂停所有写入进程；未进入维护模式时更新命令会拒绝执行。
 
-可在更新前运行 `php artisan v2board:normalize-email` 进行只读检查。若多个账号规范化后相同，更新会在执行 SQL 前停止，并报告冲突用户 ID；请核实账号归属后分别修改邮箱，再重试，不会自动合并或覆盖账号。已有账号的历史大小写和空格在应用查询中仍有兼容处理。需要单独升级邮箱列时，在维护窗口执行 `php artisan v2board:normalize-email --apply`。
+正常执行 `bash update.sh` 时，脚本会先获取新代码、安装对应依赖，再自动检查邮箱冲突，最后才执行数据库变更。旧版本尚无 `v2board:normalize-email` 命令，无需在获取新代码前手动运行。
+
+若多个账号规范化后相同，更新会在导入 `database/update.sql` 和写入邮箱数据前停止，并报告冲突用户 ID。此时代码和依赖已更新，数据库变更尚未开始；请保持维护模式，核实账号归属并分别修改邮箱，再执行 `bash update.sh --local` 重试，不会自动合并或覆盖账号。
+
+`php artisan v2board:normalize-email` 用于已同步本次新代码、安装对应依赖后单独进行只读检查，不是首次更新的前置步骤。如需手动检查，可先完成代码同步和依赖安装，运行该命令后再执行 `bash update.sh --local`；正式更新仍会重新检查冲突。已有账号的历史大小写和空格在应用查询中仍有兼容处理。需要单独升级邮箱列时，在维护窗口执行 `php artisan v2board:normalize-email --apply`。
 
 ## 4. 刷新配置和队列
 
