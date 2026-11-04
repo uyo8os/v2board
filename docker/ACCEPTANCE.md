@@ -116,3 +116,23 @@ ALL INSTALLATION, UPGRADE AND RUNTIME CHECKS PASSED
 ```
 
 支付新增回归使用离线模拟：覆盖五个 Stripe 渠道的请求及验签、Curl 支付请求与 Telegram 参数，不联系真实网关。未执行真实支付、退款、SMTP 或 Telegram 发送；保留旧 Stripe Sources 渠道不代表解除其服务端停用或账户限制。完整版本对照和兼容修复见 [依赖升级日志](../docs/changelog/2026-11-04-dependency-updates.md)。
+
+## 2026-11-04：Webman 风控 IP 修复验收
+
+使用 Laravel 13.40.0、MySQL 5.7.44、Redis 7.4.8，在以下隔离项目验证两种 HTTP 入口：
+
+| 项目 | PHP | PHP-FPM / Webman 端口 | 最终单元测试 |
+| --- | --- | --- | --- |
+| `v2board-webman-ip-84` | 8.4.27 | 18900 / 18901 | 114 tests / 624 assertions |
+| `v2board-webman-ip-final85` | 8.5.12 | 18902 / 18903 | 114 tests / 624 assertions |
+
+- 两组均完成全新安装、Composer 安装 / 更新 / 平台检查 / 安全审计、Git 升级及数据保留检查，原登录、订阅、订单、流量和队列运行验收通过。
+- PHP 8.5 的完整 `docker/tests/run.sh` 返回 0；PHP 8.4 在安装、升级及运行阶段通过后，补齐新增探针并单独运行成功。最终空代理列表边界修复同步到两组测试卷后，重新运行全部单元测试、重启服务并检查风控 IP，均返回 0。
+- `docker/tests/proxy-ip.php` 分别通过 PHP-FPM、Webman 发起真实登录和订阅请求，直接检查 `v2_insider_guard_activity` 中实际客户端 IP 对应的活动计数增加，四项均通过。
+- 客户端同时伪造 XFF、CF-Connecting-IP、X-Real-IP 时，两种入口仍记录实际客户端 IP。异步订阅审计同样没有写入伪造 IP。
+- 单元测试覆盖明确 IP / 网段、IPv6、多层代理、空列表、连续请求、转发 Host / Port 及 PHP-FPM 原配置兼容。两组均启用弃用和警告判失败。
+- 最终 `nginx -t`、`php-fpm -t` 通过，Horizon 状态为 running。
+
+Docker 中 Nginx 使用实际容器 IP，因此验收脚本只将该具体 IP 加入 Webman 可信列表，不信任整个容器网段。脚本同时在应用容器重启后重载 Nginx，刷新上游容器地址。
+
+安装及运行原始输出位于未跟踪的 `.docker-test/webman-ip-84.log`、`.docker-test/webman-ip-final85.log`；最终补充回归输出见本次执行记录。未连接真实 Cloudflare / CDN，链路兼容通过代理链单元测试和本地 Nginx 验证，服务器仍需保留原有真实 IP 配置。修复范围见 [更新日志](../docs/changelog/2026-11-04-webman-client-ip-fix.md)。

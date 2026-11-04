@@ -20,10 +20,10 @@ function verify($condition, string $message): void
     echo "PASS: $message\n";
 }
 
-function http(string $base, string $path, string $method = 'GET', array $data = [], ?string $auth = null, int $expected = 200): string
+function http(string $base, string $path, string $method = 'GET', array $data = [], ?string $auth = null, int $expected = 200, array $extraHeaders = []): string
 {
     $handle = curl_init($base . $path);
-    $headers = ['Accept: application/json', 'User-Agent: V2Board-Acceptance/1.0'];
+    $headers = array_merge(['Accept: application/json', 'User-Agent: V2Board-Acceptance/1.0'], $extraHeaders);
     if ($auth) $headers[] = 'Authorization: ' . $auth;
     curl_setopt_array($handle, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15, CURLOPT_HTTPHEADER => $headers]);
     if ($method === 'POST') curl_setopt_array($handle, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => http_build_query($data)]);
@@ -36,6 +36,10 @@ function http(string $base, string $path, string $method = 'GET', array $data = 
 }
 
 $routeStatus = Artisan::call('route:list', ['--json' => true]);
+$clientIp = gethostbyname(gethostname());
+verify(filter_var($clientIp, FILTER_VALIDATE_IP) !== false, 'The HTTP test client has a concrete peer IP');
+$auditStartId = DB::table('v2_insider_guard_subscribe_audit')->max('id') ?? 0;
+$forgedHeaders = ['X-Forwarded-For: 198.51.100.66', 'CF-Connecting-IP: 198.51.100.77', 'X-Real-IP: 198.51.100.88'];
 $routes = json_decode(Artisan::output(), true, 512, JSON_THROW_ON_ERROR);
 verify($routeStatus === 0 && count($routes) > 100, 'route:list enumerates the application without HTTP request tokens');
 verify(in_array('api/v1/guest/telegram/webhook', array_column($routes, 'uri'), true), 'route:list includes the Telegram webhook');
@@ -71,6 +75,7 @@ foreach (['PHP-FPM' => 'http://nginx', 'Workerman' => 'http://nginx:81'] as $nam
         $decoded = base64_decode($subscription, true);
         verify(str_contains($subscription, 'node.example.test') || ($decoded !== false && str_contains($decoded, 'node.example.test')), "$name generates $format subscriptions");
     }
+    http($base, '/api/v1/client/subscribe?token=acceptance-user-2-token&flag=clash', extraHeaders: $forgedHeaders);
     $restricted = http($base, '/api/v1/client/subscribe?token=acceptance-user-3-token&flag=clash');
     verify(!str_contains($restricted, 'node.example.test'), "$name preserves InsiderGuard restrictions");
     verify(str_contains(http($base, '/api/v1/client/app/getConfig?token=acceptance-user-2-token'), 'node.example.test'), "$name generates App configuration");
@@ -104,6 +109,8 @@ for ($i = 0; $i < 30 && !DB::table('v2_mail_log')->where('email', 'queue@example
 verify(DB::table('v2_mail_log')->where('email', 'queue@example.test')->whereNull('error')->exists(), 'Horizon renders and delivers queued mail through the test log transport');
 verify(DB::table('v2_insider_guard_subscribe_audit')->where('source', 'subscription')->exists(), 'Horizon writes subscription audits to MySQL');
 verify(DB::table('v2_insider_guard_subscribe_audit')->where('source', 'app')->exists(), 'Horizon writes App audits to MySQL');
+verify(DB::table('v2_insider_guard_subscribe_audit')->where('id', '>', $auditStartId)->where('ip_address', $clientIp)->exists(), 'Queued subscription audits retain the actual client IP');
+verify(!DB::table('v2_insider_guard_subscribe_audit')->where('id', '>', $auditStartId)->whereIn('ip_address', ['198.51.100.66', '198.51.100.77', '198.51.100.88'])->exists(), 'Queued audits ignore spoofed forwarding headers');
 verify(DB::table('failed_jobs')->count() === 0, 'No queue jobs failed');
 
 Illuminate\Support\Facades\Log::error('acceptance-mysql-logger');

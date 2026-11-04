@@ -12,6 +12,8 @@
 
 升级 Stripe、Guzzle、Curl、MessagePack、Sodium、reCAPTCHA、YAML 和 PHPUnit 等依赖，补齐支付及主题异常兼容修复，详见 [依赖升级日志](changelog/2026-11-04-dependency-updates.md)。
 
+修复启用 Webman 后风控中心记录的用户 IP 为 `127.0.0.1` 的问题，保留普通 PHP-FPM 的原有处理，详见 [Webman 用户 IP 修复日志](changelog/2026-11-04-webman-client-ip-fix.md)。
+
 ## 2026 年 11 月 03 日
 
 新增风控中心和订阅与 App 配置的逐次审计，支持筛选、统计和自动清理；修复风控 UA 字典缺失时未能及时补齐的问题。

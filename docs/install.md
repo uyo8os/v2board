@@ -230,6 +230,20 @@ cp /www/server/php/85/etc/php.ini webman-php.ini
 proxy_set_header Host $http_host;
 ```
 
+### 如果开启 Webman 后风控中心的 IP 显示为 127.0.0.1
+
+确认上面的 `location @backend` 保留了 `X-Forwarded-For` 配置。项目默认仅在 Webman 中信任本机 Nginx（`127.0.0.1`、`::1`）传来的客户端 IP，普通 PHP-FPM 的处理保持原样。
+
+更新代码后，在站点目录执行：
+
+```sh
+/www/server/php/85/bin/php artisan config:cache
+```
+
+然后在 Supervisor 中重启 Webman。使用 Cloudflare 或其他 CDN 时，保留原来让 PHP-FPM 正常获取用户 IP 的 Nginx 真实 IP 配置。如果 Nginx 与 Webman 不在同一台机器，可在 `.env` 的 `WEBMAN_TRUSTED_PROXIES` 中填写实际代理 IP 或网段，以逗号分隔。
+
+修复只影响之后的新请求，历史记录中的 `127.0.0.1` 无法自动还原。
+
 ### 注意
 
 启用 Webman 后，修改代码需要在 Supervisor 中重启 Webman 才会生效。

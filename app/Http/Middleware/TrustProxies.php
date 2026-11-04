@@ -24,4 +24,24 @@ class TrustProxies extends Middleware
         | Request::HEADER_X_FORWARDED_PORT
         | Request::HEADER_X_FORWARDED_PROTO
         | Request::HEADER_X_FORWARDED_AWS_ELB;
+
+    protected function setTrustedProxyIpAddresses(Request $request)
+    {
+        if (defined('isWEBMAN') && isWEBMAN) {
+            return $this->setTrustedProxyIpAddressesToSpecificIps(
+                $request,
+                config('webman.trusted_proxies', ['127.0.0.1', '::1'])
+            );
+        }
+
+        return parent::setTrustedProxyIpAddresses($request);
+    }
+
+    protected function headers()
+    {
+        // Nginx passes Host directly; forwarded Host/Port remain untrusted.
+        return defined('isWEBMAN') && isWEBMAN
+            ? Request::HEADER_X_FORWARDED_FOR | Request::HEADER_X_FORWARDED_PROTO
+            : parent::headers();
+    }
 }
