@@ -14,17 +14,26 @@
 
 ## 2. 安装 PHP 扩展
 
-宝塔面板 → 软件商店 → 找到 PHP 8.5 点击「设置」→「安装扩展」，安装以下扩展：
+宝塔面板 → 软件商店 → 找到 PHP 8.5 点击「设置」→「安装扩展」，确认以下扩展已经安装，缺少时再安装：
 
 - `redis`
 - `fileinfo`
-- `bcmath`
-- `pcntl`
-- `posix`
 
-（`pdo_mysql`、`openssl`、`curl`、`mbstring`、`dom`、`xml` 通常已内置，如缺失也需安装。）
+`bcmath`、`pcntl`、`posix`、`gd`、`zip` 等扩展可能已经随 PHP 编译安装，不一定在面板中提供单独的安装按钮。通过 SSH 检查宝塔 PHP 8.5 已加载的扩展：
 
-推荐安装 `gd` 和 `zip`。没有 `zip` 时，服务器需要安装 `unzip`，用于解压 Composer 依赖。
+```sh
+/www/server/php/85/bin/php -m
+```
+
+如果使用 PHP 8.4，将路径中的 `85` 改为 `84`。
+
+列表中已经出现的扩展无需重复安装，也可以在面板的 PHP 信息中查看。[aaPanel 扩展检查说明](https://www.aapanel.com/forum/d/3359-can-you-add-php-extensions)
+
+- `bcmath`、`pcntl`、`posix`：本项目必需，确认出现在列表中即可。
+- `gd`：可选，用于 PNG 验证码；缺少时当前代码会使用 SVG 验证码。
+- `zip`：可选，用于解压依赖；没有 PHP `zip` 扩展时，可以使用系统 `unzip`。
+
+`pdo_mysql`、`openssl`、`curl`、`mbstring`、`dom`、`xml` 通常也已包含。确实缺少必需扩展时，先确认命令行使用的是所选 PHP 版本，再为该版本补齐扩展。
 
 确认 Redis 服务已经启动；PHP 的 `redis` 扩展和 Redis 服务需要分别安装。
 
@@ -239,7 +248,7 @@ chmod g+w .
 检查 PHP 扩展：
 
 ```sh
-php -m | grep -iE 'redis|fileinfo|bcmath|pcntl|posix'
+/www/server/php/85/bin/php -m | grep -iE 'redis|fileinfo|bcmath|pcntl|posix'
 ```
 
 **Q：页面空白**
