@@ -292,3 +292,65 @@ A：在宝塔面板中重启 PHP 服务，并确认 Horizon 已重新启动；�
 A：本项目要求 PHP 8.4 起的兼容 8.x 版本。安装 PHP 8.5 后，需要同时切换站点版本和「PHP CLI」版本。计划任务或 Supervisor 仍使用旧版本时，将启动命令中的 `php` 换成所选版本的完整路径，例如 `/www/server/php/85/bin/php`。
 
 > 本次完整运行验收使用 PHP 8.4、MySQL 5.7 和 Redis 7.4。PHP 8.5 已核对依赖版本约束，尚未完成同样的运行测试。
+
+## 其它解决办法
+
+**Q：500 错误**
+
+A：检查站点根目录权限，递归 755，保证目录有可写文件的权限：
+
+```
+chown -R www:www /www/wwwroot/api.example.com
+chmod -R 755 /www/wwwroot/api.example.com
+chmod -R 777 /www/wwwroot/api.example.com/storage
+```
+
+也可能是 Redis 扩展未安装或 Redis 未启动。可通过以下方式排查：
+
+```
+# 查看 Laravel 错误日志
+tail -50 storage/logs/laravel.log
+
+# 检查 PHP 扩展
+php -m | grep -iE "redis|fileinfo|pcntl"
+```
+
+**Q：页面空白**
+
+A：清除所有缓存：
+
+```
+php artisan config:clear
+php artisan cache:clear
+php artisan view:clear
+composer dump-autoload
+```
+
+**Q：队列不消费**
+
+A：检查 Supervisor 中 v2board 进程是否在运行，必要时重启：
+
+```
+php artisan horizon:terminate
+```
+
+然后在宝塔 Supervisor 中重启进程。
+
+**Q：更新代码后功能异常**
+
+A：清除 OPcache 并重启 PHP：
+
+```
+php -r "opcache_reset();"
+```
+
+然后在宝塔面板中重启 PHP 服务。
+
+**Q: 邮件发送失败**
+
+A: 检查邮件配置：
+
+```
+php artisan tinker
+Mail::raw('test', function($msg) { $msg->to('test@example.com')->subject('Test'); });
+```
