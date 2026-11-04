@@ -1,5 +1,5 @@
 <?php
-/** Defensive regression evidence. Uses an in-memory database and dummy values only. */
+/** A01 rejection regression and still-open logging/captcha observations. Synthetic data only. */
 require dirname(__DIR__, 2) . '/vendor/autoload.php';
 
 use App\Http\Controllers\V1\Guest\CaptchaController;
@@ -13,23 +13,25 @@ use Illuminate\Container\Container;
 use Illuminate\Contracts\Routing\ResponseFactory;
 use Illuminate\Database\Capsule\Manager;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Foundation\Application;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Facade;
 use Monolog\Logger;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 if (PHP_SAPI !== 'cli') { exit(1); }
 if (!in_array('sqlite', PDO::getAvailableDrivers(), true)) {
     fwrite(STDERR, "Run PHP with PDO SQLite enabled.\n");
     exit(1);
 }
-$app = new Container();
+$app = new Application(dirname(__DIR__, 2));
 Container::setInstance($app);
 Facade::clearResolvedInstances();
 Facade::setFacadeApplication($app);
 // The unqualified Cache facade in the existing captcha service uses this alias.
 if (!class_exists('Cache', false)) class_alias(Illuminate\Support\Facades\Cache::class, 'Cache');
-$app->instance('config', new Config());
+$app->instance('config', new Config(['app' => ['key' => str_repeat('offline-audit-key-', 3)]]));
 $app->instance('cache', new Repository(new ArrayStore()));
 $responses = Mockery::mock(ResponseFactory::class);
 $responses->shouldReceive('make')->andReturnUsing(
@@ -72,7 +74,12 @@ if (!function_exists('imagecreatetruecolor')) {
     $answer = html_entity_decode(implode('', $chars[1]));
     $results['svg_fallback_answer_readable_without_image_recognition'] = strlen($answer) === 5;
     $unrelatedCacheRequest = Request::create('/api/v1/user/comm/config', 'GET', [], [], [], ['HTTP_AUTHORIZATION' => 'captcha_offline-proof']);
-    $results['unrelated_cache_key_passes_user_middleware'] = (new App\Http\Middleware\User())->handle($unrelatedCacheRequest, static fn () => true) === true;
+    try {
+        (new App\Http\Middleware\User())->handle($unrelatedCacheRequest, static fn () => true);
+        $results['unrelated_cache_key_is_rejected_by_user_middleware'] = false;
+    } catch (HttpException $error) {
+        $results['unrelated_cache_key_is_rejected_by_user_middleware'] = $error->getStatusCode() === 403;
+    }
     $results['svg_fallback_text_passes_real_verifier'] = LocalCaptchaService::verify($captcha, $answer, 'offline-proof');
     $results['captcha_success_consumes_key'] = !LocalCaptchaService::verify($captcha, $answer, 'offline-proof');
 } else {

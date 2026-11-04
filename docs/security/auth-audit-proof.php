@@ -1,5 +1,5 @@
 <?php
-/** Offline security audit proof: synthetic SQLite :memory: + array cache only. */
+/** Offline audit checks: A01 regression plus still-open A02 observations. Synthetic data only. */
 if (PHP_SAPI !== 'cli') {
     http_response_code(404);
     exit;
@@ -34,6 +34,7 @@ use Illuminate\Support\Facades\Facade;
 use Illuminate\Translation\ArrayLoader;
 use Illuminate\Translation\Translator;
 use Illuminate\Validation\Factory;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 $app = new Application(dirname(__DIR__, 2));
 $app->instance('config', new Config(['app' => ['key' => str_repeat('audit-synthetic-key-', 3)], 'v2board' => ['app_url' => 'https://offline.example.test']]));
@@ -65,20 +66,27 @@ function updateRequest(Application $app, int $id, array $fields): UserUpdate {
 }
 function adminAccepts(string $jwt, ?Closure $next = null): bool {
     $request = Request::create('/api/v1/synthetic-admin/user/update', 'POST', [], [], [], ['HTTP_AUTHORIZATION' => $jwt]);
-    return (new Admin())->handle($request, $next ?? static fn () => true) === true;
+    try {
+        return (new Admin())->handle($request, $next ?? static fn () => true) === true;
+    } catch (HttpException $error) {
+        if ($error->getStatusCode() === 403) return false;
+        throw $error;
+    }
 }
 
 $results = [];
 $user = seed(1);
 $auth = new AuthService($user);
 $jwt = $auth->generateAuthData(Request::create('/'))['auth_data'];
-AuthService::decryptAuthData($jwt); // Prime the real one-hour authorization cache.
+AuthService::decryptAuthData($jwt);
+// Simulate an old worker's authorization cache during an upgrade.
+$app['cache']->put($jwt, $user->only(['id', 'email', 'is_admin', 'is_staff']), 3600);
 $sessionId = array_key_first($auth->getSessions());
 $auth->removeSession($sessionId);
 $results['removed_session_absent_from_session_list'] = !isset($auth->getSessions()[$sessionId]);
-$results['removed_session_still_authenticates'] = (bool)AuthService::decryptAuthData($jwt);
+$results['removed_session_is_rejected_immediately'] = AuthService::decryptAuthData($jwt) === false;
 $auth->removeAllSession();
-$results['removed_then_remove_all_still_authenticates'] = (bool)AuthService::decryptAuthData($jwt);
+$results['removed_then_remove_all_remains_rejected'] = AuthService::decryptAuthData($jwt) === false;
 Carbon::setTestNow(Carbon::now()->addSeconds(3601));
 $results['removed_session_rejected_after_cache_expiry'] = AuthService::decryptAuthData($jwt) === false;
 Carbon::setTestNow();
@@ -89,11 +97,11 @@ $adminJwt = $adminAuth->generateAuthData(Request::create('/'))['auth_data'];
 $results['admin_initially_authorized'] = adminAccepts($adminJwt);
 (new AdminUserController())->update(updateRequest($app, 2, ['is_admin' => 0]));
 $results['demotion_saved_to_database'] = (int)User::find(2)->is_admin === 0;
-$results['demoted_admin_still_authorized'] = adminAccepts($adminJwt);
-$results['demoted_admin_can_restore_admin_through_real_middleware_and_controller'] = adminAccepts($adminJwt, static function () use ($app) {
+$results['demoted_admin_is_rejected'] = !adminAccepts($adminJwt);
+$results['demoted_admin_cannot_restore_admin_through_real_middleware_and_controller'] = !adminAccepts($adminJwt, static function () use ($app) {
     (new AdminUserController())->update(updateRequest($app, 2, ['is_admin' => 1]));
     return true;
-}) && (int)User::find(2)->is_admin === 1;
+}) && (int)User::find(2)->is_admin === 0;
 
 $user = seed(3);
 $oldJwt = (new AuthService($user))->generateAuthData(Request::create('/'))['auth_data'];
