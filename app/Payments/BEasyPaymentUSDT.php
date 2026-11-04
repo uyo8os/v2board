@@ -68,23 +68,37 @@ class BEasyPaymentUSDT {
 
     public function notify($params)
     {
+        $secret = $this->config['bepusdt_apitoken'] ?? null;
+        if (!is_string($secret) || trim($secret) === '' || !is_array($params)) {
+            return false;
+        }
+        foreach ($params as $value) {
+            if (!is_string($value) && !is_int($value) && !(is_float($value) && is_finite($value))) {
+                return false;
+            }
+        }
+        foreach (['order_id', 'trade_id'] as $field) {
+            $value = $params[$field] ?? null;
+            if ((!is_string($value) && !is_int($value)) || trim((string) $value) === '') {
+                return false;
+            }
+        }
+        if (!is_string($params['signature'] ?? null) || !in_array($params['status'] ?? null, [2, '2'], true)) {
+            return false;
+        }
+
         $sign = $params['signature'];
         unset($params['signature']);
         ksort($params);
         reset($params);
-        $str = stripslashes(urldecode(http_build_query($params))) . $this->config['bepusdt_apitoken'];
+        $str = stripslashes(urldecode(http_build_query($params))) . $secret;
         $generateSignature = md5($str);
         if (!hash_equals($generateSignature, $sign)) {
-            return('cannot pass verification');
-        }
-        $status = $params['status'];
-        // 1: pending 2: success 3: expired
-        if ($status != 2) {
-            return('failed');
+            return false;
         }
         return [
-            'trade_no' => $params['order_id'],
-            'callback_no' => $params['trade_id'],
+            'trade_no' => (string) $params['order_id'],
+            'callback_no' => (string) $params['trade_id'],
             'custom_result' => 'ok'
         ];
     }

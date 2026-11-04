@@ -111,24 +111,32 @@ class EPayQrcode
 
     public function notify($params)
     {
-        if (!is_array($params) || empty($params['sign'])) {
+        $secret = $this->config['key'] ?? null;
+        if (!is_string($secret) || trim($secret) === '' || !is_array($params)) {
+            return false;
+        }
+        foreach ($params as $value) {
+            if (!is_string($value) && !is_int($value) && !(is_float($value) && is_finite($value))) {
+                return false;
+            }
+        }
+        foreach (['pid', 'out_trade_no', 'trade_no'] as $field) {
+            $value = $params[$field] ?? null;
+            if ((!is_string($value) && !is_int($value)) || trim((string) $value) === '') {
+                return false;
+            }
+        }
+        $pid = $this->config['pid'] ?? null;
+        if ((!is_string($pid) && !is_int($pid)) || trim((string) $pid) === ''
+            || (string) $params['pid'] !== (string) $pid
+            || !is_string($params['sign'] ?? null)
+            || ($params['sign_type'] ?? 'MD5') !== 'MD5'
+            || ($params['trade_status'] ?? null) !== 'TRADE_SUCCESS') {
             return false;
         }
 
-        $receivedSign = strtolower((string) $params['sign']);
+        $receivedSign = strtolower($params['sign']);
         if (!hash_equals($this->sign($params), $receivedSign)) {
-            return false;
-        }
-
-        if ((string) ($params['pid'] ?? '') !== (string) ($this->config['pid'] ?? '')) {
-            return false;
-        }
-
-        if (($params['trade_status'] ?? '') !== 'TRADE_SUCCESS') {
-            return false;
-        }
-
-        if (empty($params['out_trade_no']) || empty($params['trade_no'])) {
             return false;
         }
 
