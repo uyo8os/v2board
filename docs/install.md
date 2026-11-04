@@ -22,7 +22,7 @@
 `bcmath`、`pcntl`、`posix`、`gd`、`zip` 等扩展可能已经随 PHP 编译安装，不一定在面板中提供单独的安装按钮。通过 SSH 检查宝塔 PHP 8.5 已加载的扩展：
 
 ```sh
-/www/server/php/85/bin/php -m
+/www/server/php/85/bin/php -m | grep -iE "^(redis|fileinfo|bcmath|pcntl|posix|gd|zip|pdo_mysql|openssl|curl|mbstring|dom|xml)$"
 ```
 
 如果使用 PHP 8.4，将路径中的 `85` 改为 `84`。
@@ -248,7 +248,7 @@ chmod g+w .
 检查 PHP 扩展：
 
 ```sh
-/www/server/php/85/bin/php -m | grep -iE 'redis|fileinfo|bcmath|pcntl|posix'
+/www/server/php/85/bin/php -m | grep -iE "^(redis|fileinfo|bcmath|pcntl|posix|gd|zip|pdo_mysql|openssl|curl|mbstring|dom|xml)$"
 ```
 
 **Q：页面空白**
