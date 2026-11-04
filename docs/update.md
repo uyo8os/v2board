@@ -64,8 +64,37 @@ git fetch origin
 git checkout fix
 git merge --ff-only origin/fix
 git branch --set-upstream-to=origin/fix fix
+```
+
+成功后检查：
+
+```
+git branch --show-current
+grep -nE '"laravel/framework"|"symfony/yaml"' composer.json
+head -n 5 update.sh
+```
+
+应当看到：
+
+- 分支为 `fix`
+- Laravel 为 `^13.40`
+- YAML 为 `^8.1`
+- 更新脚本开头包含 `set -eu`
+
+确认一致后，再执行：
+
+```
 bash update.sh --local
 ```
+
+更新成功后，在宝塔重启 PHP，并启动 Supervisor 中的 Horizon 和已启用的 Webman。执行：
+
+```
+php artisan --version
+php artisan horizon:status
+```
+
+确认 Laravel 为 **13.40.0**、Horizon 显示 **running**，再执行 `php artisan up`，恢复网站和计划任务。
 
 以上命令会将 `origin` 设置为本项目仓库。任何一步报错都先停止，处理完成后再继续，不要强制覆盖自己的代码修改。
 
