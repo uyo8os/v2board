@@ -51,7 +51,17 @@
 - `pcntl_async_signals`
 - `posix_kill`
 
-没有出现在禁用列表中的函数无需处理。修改后重启 PHP 服务。
+通过 SSH 检查当前命令行 PHP 的禁用函数：
+
+```sh
+/www/server/php/85/bin/php -r "echo ini_get('disable_functions'), PHP_EOL;"
+```
+
+上述函数不应出现在输出的禁用列表中；输出为空表示当前命令行 PHP 没有禁用函数。
+
+如果修改后仍显示被禁用，执行 `/www/server/php/85/bin/php --ini`，确认实际加载的配置文件。命令行 PHP 可能使用 `php-cli.ini`，应从对应配置的 `disable_functions` 中移除上述函数。
+
+保存后重启 PHP 服务；已经运行的 Horizon 也要在 Supervisor 中重启。PHP-FPM 的配置需同时在面板中确认。
 
 ## 4. 添加站点
 
