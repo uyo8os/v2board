@@ -24,3 +24,5 @@ public/clients/*
 workerman.webman.php.pid
 workerman.log
 /.docker-test/
+# 管理端前端
+/frontend/admin/v2board-admin/
