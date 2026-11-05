@@ -4,6 +4,8 @@
 
 ## 2026 年 11 月 05 日
 
+补充 [套餐流量周期修复与并发隔离设计](design/2026-11-05-traffic-period-repair-plan.md)，覆盖自然月与闰年、提前领取周期、可靠入账、短事务和资源预算，以及迁移、回滚和验收要求。当前为方案文档，业务修复尚未实现或部署。
+
 修复安全审计 A11：系统日志改用允许字段和固定事件标题，避免请求参数、URL 查询串及异常详情中的凭据进入受保护的日志通道。历史日志与独立业务日志仍需按实际范围处理。详见 [系统日志安全修复日志](changelog/2026-11-05-system-log-security-fix.md) 和 [日志说明](logging.md)。
 
 更新四个命中安全公告的 Symfony 锁定依赖，保留 Composer 安全检查。详见 [Symfony 安全依赖更新日志](changelog/2026-11-05-symfony-security-updates.md)。
