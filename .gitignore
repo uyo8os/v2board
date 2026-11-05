@@ -26,3 +26,9 @@ workerman.log
 /.docker-test/
 # 管理端前端
 /frontend/admin/v2board-admin/
+# 主题端前端
+/frontend/theme/
+# V2Board 节点服务端
+/services/v2node/
+# API 加密代理服务
+/services/api-proxy/GeneralEncryptionMiddleware/
