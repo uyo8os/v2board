@@ -1020,3 +1020,12 @@ CREATE TABLE IF NOT EXISTS `v2_insider_guard_subscribe_audit` (
   KEY `audit_ip_time` (`ip_address`,`requested_at`,`id`),
   KEY `audit_result_time` (`result`,`requested_at`,`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='风控中心：逐次订阅和 App 配置请求，不保存订阅凭据或响应正文';
+
+
+/* Fixed personal reset state; no history/event tables. */
+ALTER TABLE `v2_user` ADD `traffic_reset_anchor_at` bigint(20) DEFAULT NULL;
+ALTER TABLE `v2_user` ADD `traffic_reset_offset` bigint(20) unsigned NOT NULL DEFAULT 0;
+ALTER TABLE `v2_user` ADD `traffic_reset_at` bigint(20) DEFAULT NULL;
+ALTER TABLE `v2_user` ADD `traffic_reset_plan_id` int(11) DEFAULT NULL;
+ALTER TABLE `v2_user` ADD `traffic_reset_method` tinyint DEFAULT NULL;
+ALTER TABLE `v2_user` ADD INDEX `traffic_reset_due` (`traffic_reset_at`,`id`);

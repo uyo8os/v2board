@@ -10,6 +10,10 @@ class User extends Model
     protected $table = 'v2_user';
     protected $dateFormat = 'U';
     protected $guarded = ['id'];
+    protected $hidden = [
+        'traffic_reset_anchor_at', 'traffic_reset_offset', 'traffic_reset_at',
+        'traffic_reset_plan_id', 'traffic_reset_method',
+    ];
     protected $casts = [
         'created_at' => 'timestamp',
         'updated_at' => 'timestamp'

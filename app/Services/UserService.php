@@ -12,136 +12,24 @@ use App\Models\User;
 
 class UserService
 {
-    private function calcResetDayByMonthFirstDay()
+    public function getResetAt(User $user, ?int $now = null): ?int
     {
-        $today = date('d');
-        $lastDay = date('d', strtotime('last day of +0 months'));
-        return $lastDay - $today;
+        return (new TrafficResetService())->nextResetAt($user, $now);
     }
 
-    private function calcResetDayByExpireDay(int $expiredAt)
+    public function getResetDay(User $user, ?int $now = null): ?int
     {
-        $day = date('d', $expiredAt);
-        $today = date('d');
-        $lastDay = date('d', strtotime('last day of +0 months'));
-        if ((int)$day >= (int)$today && (int)$day >= (int)$lastDay) {
-            return $lastDay - $today;
-        }
-        if ((int)$day >= (int)$today) {
-            return $day - $today;
-        }
-
-        return $lastDay - $today + $day;
+        $now ??= time();
+        $resetAt = $this->getResetAt($user, $now);
+        return $resetAt === null ? null : max(0, (int) ceil(($resetAt - $now) / 86400));
     }
 
-    private function calcResetDayByYearFirstDay(): int
+    public function getResetPeriod(User $user): ?int
     {
-        $nextYear = strtotime(date("Y-01-01", strtotime('+1 year')));
-        return (int)(($nextYear - time()) / 86400);
-    }
-
-    private function calcResetDayByYearExpiredAt(int $expiredAt): int
-    {
-        $md = date('m-d', $expiredAt);
-        $nowYear = strtotime(date("Y-{$md}"));
-        $nextYear = strtotime('+1 year', $nowYear);
-        if ($nowYear > time()) {
-            return (int)(($nowYear - time()) / 86400);
-        }
-        return (int)(($nextYear - time()) / 86400);
-    }
-
-    public function getResetDay(User $user)
-    {
-        if (!isset($user->plan)) {
-            if ($user->plan_id === NULL) return null;
-            $user->plan = Plan::find($user->plan_id);
-        }
-        if ($user->expired_at <= time() || $user->expired_at === NULL) return null;
-        // if reset method is not reset
-        if ($user->plan->reset_traffic_method === 2) return null;
-        switch (true) {
-            case ($user->plan->reset_traffic_method === NULL): {
-                $resetTrafficMethod = config('v2board.reset_traffic_method', 0);
-                switch ((int)$resetTrafficMethod) {
-                    // month first day
-                    case 0:
-                        return $this->calcResetDayByMonthFirstDay();
-                    // expire day
-                    case 1:
-                        return $this->calcResetDayByExpireDay($user->expired_at);
-                    // no action
-                    case 2:
-                        return null;
-                    // year first day
-                    case 3:
-                        return $this->calcResetDayByYearFirstDay();
-                    // year expire day
-                    case 4:
-                        return $this->calcResetDayByYearExpiredAt($user->expired_at);
-                }
-                break;
-            }
-            case ($user->plan->reset_traffic_method === 0): {
-                return $this->calcResetDayByMonthFirstDay();
-            }
-            case ($user->plan->reset_traffic_method === 1): {
-                return $this->calcResetDayByExpireDay($user->expired_at);
-            }
-            case ($user->plan->reset_traffic_method === 2): {
-                return null;
-            }
-            case ($user->plan->reset_traffic_method === 3): {
-                return $this->calcResetDayByYearFirstDay();
-            }
-            case ($user->plan->reset_traffic_method === 4): {
-                return $this->calcResetDayByYearExpiredAt($user->expired_at);
-            }
-        }
-        return null;
-    }
-
-    public function getResetPeriod(User $user)
-    {
-        if ($user->plan_id === NULL) return null;
-        $plan = Plan::find($user->plan_id);
-        if ($user->expired_at <= time() || $user->expired_at === NULL) return null;
-        // if reset method is not reset
-        if ($plan->reset_traffic_method === 2) return null;
-        switch (true) {
-            case ($plan->reset_traffic_method === NULL) : {
-                $resetTrafficMethod = config('v2board.reset_traffic_method', 0);
-                switch ((int)$resetTrafficMethod) {
-                    case 0:
-                        return 1;
-                    case 1:
-                        return 30;
-                    case 2:
-                        return null;
-                    case 3:
-                        return 12;
-                    case 4:
-                        return 365;
-                }
-                break;
-            }
-            case ($plan->reset_traffic_method === 0): {
-                return 1;
-            }
-            case ($plan->reset_traffic_method === 1): {
-                return 30;
-            }
-            case ($plan->reset_traffic_method === 2): {
-                return null;
-            }
-            case ($plan->reset_traffic_method === 3): {
-                return 12;
-            }
-            case ($plan->reset_traffic_method === 4): {
-                return 365;
-            }
-        }    
-        return null;
+        if ($user->expired_at === null || (int) $user->expired_at <= time()) return null;
+        return match ((new TrafficResetService())->method($user)) {
+            0 => 1, 1 => 30, 3 => 12, 4 => 365, default => null,
+        };
     }
 
     public function isAvailable(User $user)

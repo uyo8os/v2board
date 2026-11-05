@@ -38,6 +38,7 @@ class Kernel extends ConsoleKernel
         $schedule->command('check:renewal')->dailyAt('22:30');
         // reset
         $schedule->command('reset:traffic')->daily();
+        $schedule->command('reset:traffic --personal-only')->everyMinute()->withoutOverlapping(2);
         $schedule->command('reset:log')->daily();
         // speed limit
         $schedule->command('speedlimit:release')->everyMinute()->withoutOverlapping();

@@ -624,12 +624,18 @@ CREATE TABLE `v2_user` (
                            `remind_traffic` tinyint(4) DEFAULT '1',
                            `token` char(32) NOT NULL,
                            `expired_at` bigint(20) DEFAULT '0',
+                           `traffic_reset_anchor_at` bigint(20) DEFAULT NULL,
+                           `traffic_reset_offset` bigint(20) unsigned NOT NULL DEFAULT 0,
+                           `traffic_reset_at` bigint(20) DEFAULT NULL,
+                           `traffic_reset_plan_id` int(11) DEFAULT NULL,
+                           `traffic_reset_method` tinyint DEFAULT NULL,
                            `remarks` text,
                            `created_at` int(11) NOT NULL,
                            `updated_at` int(11) NOT NULL,
                            PRIMARY KEY (`id`),
                            UNIQUE KEY `email` (`email`),
-                           UNIQUE KEY `token` (`token`)
+                           UNIQUE KEY `token` (`token`),
+                           KEY `traffic_reset_due` (`traffic_reset_at`,`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 

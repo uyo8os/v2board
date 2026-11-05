@@ -3,21 +3,24 @@
 namespace App\Console\Commands;
 
 use App\Models\Plan;
-use Illuminate\Console\Command;
 use App\Models\User;
+use App\Services\TrafficResetService;
+use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use App\Services\TelegramService;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redis;
 
 class ResetTraffic extends Command
 {
-    protected $builder;
+    public const PERSONAL_CURSOR_CACHE_KEY = 'traffic_reset_personal_scan';
+
     /**
      * The name and signature of the console command.
      *
      * @var string
      */
-    protected $signature = 'reset:traffic';
+    protected $signature = 'reset:traffic {--personal-only : 仅处理提前开启后的个人排期}';
 
     /**
      * The console command description.
@@ -27,173 +30,146 @@ class ResetTraffic extends Command
     protected $description = '流量清空';
 
     /**
-     * Create a new command instance.
-     *
-     * @return void
-     */
-    public function __construct()
-    {
-        parent::__construct();
-        $this->builder = User::where('expired_at', '!=', NULL)
-            ->where('expired_at', '>', time());
-    }
-
-    /**
      * Execute the console command.
      *
      * @return mixed
      */
-    public function handle()
+    public function handle(TrafficResetService $resets)
     {
-        ini_set('memory_limit', -1);
+        $now = time();
+        if ($this->option('personal-only')) {
+            $this->resetPersonal($resets, $now);
+            return;
+        }
+
         Redis::setex('traffic_reset_lock', 300, 1);
-        $resetMethods = Plan::select(
-            DB::raw("GROUP_CONCAT(`id`) as plan_ids"),
-            DB::raw("reset_traffic_method as method")
-        )
-            ->groupBy('reset_traffic_method')
-            ->get()
-            ->toArray();
-        foreach ($resetMethods as $resetMethod) {
-            $planIds = explode(',', $resetMethod['plan_ids']);
-            switch (true) {
-                case ($resetMethod['method'] === NULL): {
-                    $resetTrafficMethod = config('v2board.reset_traffic_method', 0);
-                    $builder = with(clone($this->builder))->whereIn('plan_id', $planIds);
-                    switch ((int)$resetTrafficMethod) {
-                        // month first day
-                        case 0:
-                            $this->resetByMonthFirstDay($builder);
-                            break;
-                        // expire day
-                        case 1:
-                            $this->resetByExpireDay($builder);
-                            break;
-                        // no action
-                        case 2:
-                            break;
-                        // year first day
-                        case 3:
-                            $this->resetByYearFirstDay($builder);
-                        // year expire day
-                        case 4:
-                            $this->resetByExpireYear($builder);
+        try {
+            $resetMethods = Plan::select(
+                DB::raw('GROUP_CONCAT(`id`) as plan_ids'),
+                'reset_traffic_method'
+            )->groupBy('reset_traffic_method')->get();
+
+            foreach ($resetMethods as $resetMethod) {
+                $method = (int) ($resetMethod->reset_traffic_method
+                    ?? config('v2board.reset_traffic_method', 0));
+                if ($method === 2 || $method < 0 || $method > 4) {
+                    continue;
+                }
+                if (($method === 0 && date('d', $now) !== '01')
+                    || ($method === 3 && date('md', $now) !== '0101')) {
+                    continue;
+                }
+
+                $builder = User::select(TrafficResetService::SNAPSHOT_FIELDS)->whereNotNull('expired_at')
+                    ->where('expired_at', '>', $now)
+                    ->whereIn('plan_id', explode(',', $resetMethod->plan_ids))
+                    ->where(function ($query) use ($method) {
+                        // A valid personal schedule is reset only through its cursor.
+                        $query->whereNull('traffic_reset_anchor_at')
+                            ->orWhereNull('traffic_reset_plan_id')
+                            ->orWhereColumn('traffic_reset_plan_id', '!=', 'plan_id')
+                            ->orWhereNull('traffic_reset_method')
+                            ->orWhere('traffic_reset_method', '!=', $method);
+                    });
+
+                $builder->chunkById(100, function ($users) use ($resets, $method, $now) {
+                    foreach ($users as $user) {
+                        if (!$this->legacyResetIsDue($user, $method, $now)) {
+                            continue;
+                        }
+                        try {
+                            $resets->resetLegacy($user, $now);
+                        } catch (\Throwable $exception) {
+                            Log::error('Traffic reset failed', [
+                                'user_id' => $user->id,
+                                'exception' => $exception,
+                            ]);
+                        }
                     }
-                    break;
-                }
-                case ($resetMethod['method'] === 0): {
-                    $builder = with(clone($this->builder))->whereIn('plan_id', $planIds);
-                    $this->resetByMonthFirstDay($builder);
-                    break;
-                }
-                case ($resetMethod['method'] === 1): {
-                    $builder = with(clone($this->builder))->whereIn('plan_id', $planIds);
-                    $this->resetByExpireDay($builder);
-                    break;
-                }
-                case ($resetMethod['method'] === 2): {
-                    break;
-                }
-                case ($resetMethod['method'] === 3): {
-                    $builder = with(clone($this->builder))->whereIn('plan_id', $planIds);
-                    $this->resetByYearFirstDay($builder);
-                    break;
-                }
-                case ($resetMethod['method'] === 4): {
-                    $builder = with(clone($this->builder))->whereIn('plan_id', $planIds);
-                    $this->resetByExpireYear($builder);
-                    break;
-                }
+                });
             }
-        }
-        Redis::del('traffic_reset_lock');
-    }
-
-    private function resetByExpireYear($builder): void
-    {
-        $users = [];
-        foreach ($builder->get() as $item) {
-            $expireDay = date('m-d', $item->expired_at);
-            $today = date('m-d');
-            if ($expireDay === $today) {
-                array_push($users, $item->id);
-            }
-        }
-        $this->retryTransaction(function () use ($users) {
-            User::whereIn('id', $users)->update([
-                'u' => 0,
-                'd' => 0
-            ]);
-        });
-    }
-
-    private function resetByYearFirstDay($builder): void
-    {
-        if ((string)date('md') === '0101') {
-            $this->retryTransaction(function () use ($builder) {
-                $builder->update([
-                    'u' => 0,
-                    'd' => 0
-                ]);
-            });
+        } finally {
+            Redis::del('traffic_reset_lock');
         }
     }
 
-    private function resetByMonthFirstDay($builder): void
+    private function resetPersonal(TrafficResetService $resets, int $now): void
     {
-        if ((string)date('d') === '01') {
-            $this->retryTransaction(function () use ($builder) {
-                $builder->update([
-                    'u' => 0,
-                    'd' => 0
-                ]);
-            });
+        $deadline = hrtime(true) + 2000000000;
+        $cursor = Cache::get(self::PERSONAL_CURSOR_CACHE_KEY);
+        if (!is_array($cursor)
+            || !array_key_exists('at', $cursor)
+            || ($cursor['at'] !== null && !is_int($cursor['at']))
+            || !isset($cursor['id'], $cursor['until'])
+            || !is_int($cursor['id']) || $cursor['id'] < 0
+            || !is_int($cursor['until']) || $cursor['until'] > $now) {
+            $cursor = ['at' => null, 'id' => 0, 'until' => $now];
         }
-    }
 
-    private function resetByExpireDay($builder): void
-    {
-        $lastDay = date('t');
-        $users = [];
-        $today = date('d');
-        foreach ($builder->get() as $item) {
-            $expireDay = date('d', $item->expired_at);
-
-            if (($expireDay === $today) ||(($today === $lastDay) && $expireDay >= $lastDay)) {
-                if (time() < $item->expired_at - 2160000) {
-                    array_push($users, $item->id);
-                }
-            }
-
+        // The only range is on the due index. Expiry/context checks run on each
+        // bounded candidate instead of making MySQL scan past unlimited old rows.
+        $query = User::select(TrafficResetService::SNAPSHOT_FIELDS)->where('traffic_reset_at', '<=', $cursor['until']);
+        if ($cursor['at'] !== null) {
+            $query->where('traffic_reset_at', '>=', $cursor['at'])
+                ->where(function ($query) use ($cursor) {
+                    $query->where('traffic_reset_at', '>', $cursor['at'])
+                        ->orWhere(function ($query) use ($cursor) {
+                            $query->where('traffic_reset_at', $cursor['at'])
+                                ->where('id', '>', $cursor['id']);
+                        });
+                });
         }
-        $this->retryTransaction(function () use ($users) {
-            User::whereIn('id', $users)->update([
-                'u' => 0,
-                'd' => 0
-            ]);
-        });
-    }
+        $users = $query
+            ->orderBy('traffic_reset_at')
+            ->orderBy('id')
+            ->limit(100)
+            ->get();
 
-    private function retryTransaction($callback)
-    {
-        $attempts = 0;
-        $maxAttempts = 3;
-        while ($attempts < $maxAttempts) {
+        if ($users->isEmpty()) {
+            Cache::forever(self::PERSONAL_CURSOR_CACHE_KEY, ['at' => null, 'id' => 0, 'until' => $now]);
+            return;
+        }
+
+        $failed = 0;
+        $examples = [];
+        foreach ($users as $user) {
+            if (hrtime(true) >= $deadline) break;
+            // Failed/busy records are revisited next sweep, never at the cost of
+            // starving all later IDs. Keep the original key before the write.
+            $cursor['at'] = (int) $user->traffic_reset_at;
+            $cursor['id'] = (int) $user->id;
             try {
-                DB::transaction($callback);
-                return;
-            } catch (\Exception $e) {
-                $attempts++;
-                if ($attempts >= $maxAttempts || strpos($e->getMessage(), '40001') === false && strpos(strtolower($e->getMessage()), 'deadlock') === false) {
-                    $telegramService = new TelegramService();
-                    $message = sprintf(
-                        date('Y/m/d H:i:s') . "用户流量重置失败：" . $e->getMessage()
-                    );
-                    $telegramService->sendMessageWithAdmin($message);
-                    abort(500, '用户流量重置失败'. $e->getMessage());
-                }
-                sleep(5);
+                $resets->resetPersonal($user, $now);
+            } catch (\Throwable $exception) {
+                ++$failed;
+                if (count($examples) < 3) $examples[] = ['user_id' => $user->id, 'exception_type' => get_class($exception)];
             }
+        }
+        Cache::forever(self::PERSONAL_CURSOR_CACHE_KEY, $cursor);
+        if ($failed > 0) Log::error('Personal traffic reset page had failures', ['count' => $failed, 'examples' => $examples]);
+    }
+
+    private function legacyResetIsDue(User $user, int $method, int $now): bool
+    {
+        switch ($method) {
+            case 0:
+                return date('d', $now) === '01';
+            case 1:
+                $today = (int) date('d', $now);
+                $lastDay = (int) date('t', $now);
+                $expireDay = (int) date('d', $user->expired_at);
+                return ($today === $expireDay || ($today === $lastDay && $expireDay >= $lastDay))
+                    && $now < (int) $user->expired_at - 2160000;
+            case 3:
+                return date('md', $now) === '0101';
+            case 4:
+                $anniversary = date('m-d', $user->expired_at);
+                if ($anniversary === '02-29' && date('L', $now) === '0') {
+                    $anniversary = '02-28';
+                }
+                return date('m-d', $now) === $anniversary;
+            default:
+                return false;
         }
     }
 }
