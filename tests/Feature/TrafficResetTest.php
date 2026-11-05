@@ -33,8 +33,11 @@ class TrafficResetTest extends TestCase
             traffic_reset_plan_id INTEGER, traffic_reset_method INTEGER, updated_at INTEGER,
             token TEXT, email TEXT, uuid TEXT, device_limit INTEGER)');
         DB::statement('CREATE INDEX traffic_reset_due ON v2_user (traffic_reset_at,id)');
-        DB::statement('CREATE TABLE v2_plan (id INTEGER PRIMARY KEY,reset_traffic_method INTEGER)');
-        DB::table('v2_plan')->insert(['id' => 1, 'reset_traffic_method' => 1]);
+        DB::statement('CREATE TABLE v2_plan (id INTEGER PRIMARY KEY,reset_traffic_method INTEGER,name TEXT)');
+        DB::table('v2_plan')->insert(['id' => 1, 'reset_traffic_method' => 1, 'name' => '测试月付订阅']);
+        DB::statement('CREATE TABLE v2_traffic_advance_log (id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,email TEXT NOT NULL,plan_id INTEGER NOT NULL,plan_name TEXT NOT NULL,
+            deduct_seconds INTEGER NOT NULL,old_expired_at INTEGER NOT NULL,new_expired_at INTEGER NOT NULL,created_at INTEGER NOT NULL)');
         $this->service = new TrafficResetService();
     }
 
@@ -67,6 +70,32 @@ class TrafficResetTest extends TestCase
         $this->service->advance($user, $this->at('2026-11-05 12:00:00'));
         $this->assertSame($this->at('2026-12-05 12:00:00'), (int) $user->fresh()->expired_at);
         $this->assertSame(43200, (int) $user->fresh()->traffic_reset_offset);
+        $this->assertSame([
+            'id' => 1, 'user_id' => 1, 'email' => 'offline@example.test', 'plan_id' => 1,
+            'plan_name' => '测试月付订阅', 'deduct_seconds' => 43200,
+            'old_expired_at' => $this->at('2026-12-06 00:00:00'),
+            'new_expired_at' => $this->at('2026-12-05 12:00:00'),
+            'created_at' => $this->at('2026-11-05 12:00:00'),
+        ], (array) DB::table(TrafficResetService::ADVANCE_LOG_TABLE)->sole());
+        $this->assertSame(0, DB::transactionLevel());
+    }
+
+    public function test_record_failure_rolls_back_the_advance_and_releases_the_transaction(): void
+    {
+        $user = $this->account('2026-12-06 00:00:00');
+        $before = (array) DB::table('v2_user')->where('id', 1)->first();
+        DB::unprepared("CREATE TRIGGER reject_advance_record BEFORE INSERT ON v2_traffic_advance_log
+            BEGIN SELECT RAISE(ABORT, 'offline record failure'); END");
+        try {
+            $this->service->advance($user, $this->at('2026-11-05 00:00:00'));
+            $this->fail('A failed record insert must fail the entire advance.');
+        } catch (\Illuminate\Database\QueryException) {}
+        $this->assertSame($before, (array) DB::table('v2_user')->where('id', 1)->first());
+        $this->assertSame(0, DB::table(TrafficResetService::ADVANCE_LOG_TABLE)->count());
+        $this->assertSame(0, DB::transactionLevel());
+        DB::unprepared('DROP TRIGGER reject_advance_record');
+        $this->service->advance($user->fresh(), $this->at('2026-11-05 00:00:00'));
+        $this->assertSame(1, DB::table(TrafficResetService::ADVANCE_LOG_TABLE)->count());
     }
 
     public function test_february_period_and_the_following_march_restore_the_original_anchor(): void
@@ -95,6 +124,7 @@ class TrafficResetTest extends TestCase
         $this->assertSame($user->expired_at, $user->fresh()->expired_at);
         $this->assertSame(100, (int) $user->fresh()->u + (int) $user->fresh()->d);
         $this->assertNull($user->fresh()->traffic_reset_anchor_at);
+        $this->assertSame(0, DB::table(TrafficResetService::ADVANCE_LOG_TABLE)->count());
     }
 
     public function test_stale_second_click_cannot_clear_newly_used_traffic(): void
@@ -111,6 +141,8 @@ class TrafficResetTest extends TestCase
         } catch (RuntimeException) {}
         $this->assertSame($expiry, $user->fresh()->expired_at);
         $this->assertSame(7, (int) $user->fresh()->u);
+        $this->assertSame(1, DB::table(TrafficResetService::ADVANCE_LOG_TABLE)->count());
+        $this->assertSame(0, DB::transactionLevel());
     }
 
     public function test_stale_daily_reset_cannot_clear_the_advanced_period(): void

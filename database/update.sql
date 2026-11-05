@@ -1022,10 +1022,29 @@ CREATE TABLE IF NOT EXISTS `v2_insider_guard_subscribe_audit` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='风控中心：逐次订阅和 App 配置请求，不保存订阅凭据或响应正文';
 
 
-/* Fixed personal reset state; no history/event tables. */
+/* Fixed personal reset state. */
 ALTER TABLE `v2_user` ADD `traffic_reset_anchor_at` bigint(20) DEFAULT NULL;
 ALTER TABLE `v2_user` ADD `traffic_reset_offset` bigint(20) unsigned NOT NULL DEFAULT 0;
 ALTER TABLE `v2_user` ADD `traffic_reset_at` bigint(20) DEFAULT NULL;
 ALTER TABLE `v2_user` ADD `traffic_reset_plan_id` int(11) DEFAULT NULL;
 ALTER TABLE `v2_user` ADD `traffic_reset_method` tinyint DEFAULT NULL;
 ALTER TABLE `v2_user` ADD INDEX `traffic_reset_due` (`traffic_reset_at`,`id`);
+
+
+/* One compact record per successful early traffic-period activation. */
+CREATE TABLE IF NOT EXISTS `v2_traffic_advance_log` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) NOT NULL,
+  `email` varchar(64) NOT NULL,
+  `plan_id` int(11) NOT NULL,
+  `plan_name` varchar(255) NOT NULL,
+  `deduct_seconds` bigint(20) unsigned NOT NULL,
+  `old_expired_at` bigint(20) NOT NULL,
+  `new_expired_at` bigint(20) NOT NULL,
+  `created_at` bigint(20) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `email_id` (`email`,`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='提前开启周期成功记录';
+
+/* Existing installations may already have the record table without the search index. */
+ALTER TABLE `v2_traffic_advance_log` ADD INDEX `email_id` (`email`,`id`);

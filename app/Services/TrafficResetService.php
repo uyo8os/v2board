@@ -12,9 +12,10 @@ use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
 
-/** Fixed per-user calendar state; no event history, queue, or external calls. */
+/** Fixed calendar state with one compact record per successful manual advance. */
 class TrafficResetService
 {
+    public const ADVANCE_LOG_TABLE = 'v2_traffic_advance_log';
     public const FIELDS = [
         'traffic_reset_anchor_at', 'traffic_reset_offset', 'traffic_reset_at',
         'traffic_reset_plan_id', 'traffic_reset_method',
@@ -64,7 +65,7 @@ class TrafficResetService
         return $next < (int) $user->expired_at ? $next : null;
     }
 
-    /** Calculate outside the write, then commit all changes in one primary-key CAS. */
+    /** Calculate first; commit the primary-key CAS and its record in one short transaction. */
     public function advance(User $user, ?int $now = null): void
     {
         $now ??= time();
@@ -93,13 +94,25 @@ class TrafficResetService
         if ($offset > PHP_INT_MAX - $result['delta']) throw new RuntimeException('Traffic reset offset is invalid.');
         $query = $this->snapshot($user)->where('u', $user->u)->where('d', $user->d)
             ->where('transfer_enable', $user->transfer_enable);
-        $changed = $this->write($user->getConnection(), fn () => $query->update([
+        $values = [
             'expired_at' => $result['expires_at'], 'u' => 0, 'd' => 0,
             'traffic_reset_anchor_at' => $anchor, 'traffic_reset_offset' => $offset + $result['delta'],
             'traffic_reset_at' => $result['end'], 'traffic_reset_plan_id' => $user->plan_id,
             'traffic_reset_method' => $method, 'updated_at' => $now,
-        ]));
-        if ($changed !== 1) throw new RuntimeException('Subscription changed; refresh and try again.');
+        ];
+        $plan = $user->plan instanceof Plan ? $user->plan : Plan::find($user->plan_id);
+        $record = [
+            'user_id' => $user->id, 'email' => (string) $user->email,
+            'plan_id' => $user->plan_id, 'plan_name' => (string) ($plan?->name ?? ''),
+            'deduct_seconds' => $result['delta'], 'old_expired_at' => (int) $user->expired_at,
+            'new_expired_at' => $result['expires_at'], 'created_at' => $now,
+        ];
+        $db = $user->getConnection();
+        $this->write($db, fn () => $db->transaction(function () use ($db, $query, $values, $record) {
+            if ($query->update($values) !== 1) throw new RuntimeException('Subscription changed; refresh and try again.');
+            $db->table(self::ADVANCE_LOG_TABLE)->insert($record);
+            return 1;
+        }, 1));
     }
 
     /** Called by the existing daily task with a snapshot, never just a list of IDs. */
@@ -180,7 +193,7 @@ class TrafficResetService
             'traffic_reset_plan_id' => null, 'traffic_reset_method' => null];
     }
 
-    /** Autocommit UPDATE only: no explicit row lock, retry, sleep or network work. */
+    /** Short writes only: no explicit row lock, retry, sleep or external work. */
     private function write(Connection $db, callable $update): int
     {
         if ($db->transactionLevel() !== 0) throw new RuntimeException('Traffic reset requires an idle connection.');

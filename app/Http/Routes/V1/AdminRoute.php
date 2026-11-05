@@ -159,6 +159,9 @@ class AdminRoute
             $router->get ('/ticket/fetch', 'V1\\Admin\\TicketController@fetch');
             $router->post('/ticket/reply', 'V1\\Admin\\TicketController@reply');
             $router->post('/ticket/close', 'V1\\Admin\\TicketController@close');
+            // Successful early traffic-period activations
+            $router->get ('/trafficAdvance/fetch', 'V1\\Admin\\TrafficAdvanceController@fetch');
+            $router->post('/trafficAdvance/clear', 'V1\\Admin\\TrafficAdvanceController@clear');
             // Coupon
             $router->get ('/coupon/fetch', 'V1\\Admin\\CouponController@fetch');
             $router->post('/coupon/generate', 'V1\\Admin\\CouponController@generate');

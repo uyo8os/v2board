@@ -737,3 +737,19 @@ CREATE TABLE IF NOT EXISTS `v2_insider_guard_subscribe_audit` (
   KEY `audit_ip_time` (`ip_address`,`requested_at`,`id`),
   KEY `audit_result_time` (`result`,`requested_at`,`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='风控中心：逐次订阅和 App 配置请求，不保存订阅凭据或响应正文';
+
+
+/* One compact record per successful early traffic-period activation. */
+CREATE TABLE IF NOT EXISTS `v2_traffic_advance_log` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) NOT NULL,
+  `email` varchar(64) NOT NULL,
+  `plan_id` int(11) NOT NULL,
+  `plan_name` varchar(255) NOT NULL,
+  `deduct_seconds` bigint(20) unsigned NOT NULL,
+  `old_expired_at` bigint(20) NOT NULL,
+  `new_expired_at` bigint(20) NOT NULL,
+  `created_at` bigint(20) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `email_id` (`email`,`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='提前开启周期成功记录';
