@@ -1,5 +1,24 @@
 # 安装、依赖与升级验收记录
 
+## 2026-11-05：A11 与安全依赖完整复验
+
+更新四个 Symfony 组件后，在新隔离 Compose 项目 `v2board-a11-verified-20261105` 运行 `docker/tests/run.sh`，脚本退出码 **0**。测试使用 PHP **8.4.27**、Laravel **13.40.0**、MySQL **5.7.44**、Redis **7.4.8**、Nginx **1.30.6**；FPM / Workerman 端口为 19110 / 19111。完整输出保存在未跟踪的 `.docker-test/a11-verified-20261105.log`。
+
+- 全新安装、Git 更新、重复升级、既有数据保留和失败路径通过；新增确认未进入维护模式时数据库升级被拒绝且数据保留。
+- Composer 完整 update 和安全审计通过后，脚本恢复交付的锁文件并重新 install；平台检查、再次 audit 和后续测试针对交付版本。`/app/composer.lock` 与源文件 SHA-256 一致：`b66055f78a44221fbd4875e954be15aaca29944b0531813fb403db286ed7ad7b`，交付锁文件 audit 无公告。
+- PHPUnit 通过 **201 项测试、1496 条断言**；A11 真实 MySQL 临时表和文件日志专项 **12 项检查**通过。
+- Nginx / PHP-FPM、Workerman 和 Horizon 运行正常；登录、JWT、订阅、App、节点、订单续费、流量、邮件测试传输、订阅审计及客户端 IP 检查通过，失败队列为 0。脚本输出 `ALL RUNTIME ACCEPTANCE CHECKS PASSED` 和 `ALL INSTALLATION, UPGRADE AND RUNTIME CHECKS PASSED`。
+
+此前复验还发现验收脚本未正确进入和退出维护模式，导致 Git 升级或测试阶段失败；已调整验收脚本顺序并重新执行上述完整流程，生产升级的维护模式要求没有放宽。测试使用隔离数据与邮件日志传输，未连接生产服务器或真实支付、SMTP、Telegram。依赖变更见 [Symfony 安全依赖更新日志](../docs/changelog/2026-11-05-symfony-security-updates.md)，日志修复边界见 [A11 修复日志](../docs/changelog/2026-11-05-system-log-security-fix.md)。
+
+## 2026-11-05：A11 系统日志修复验证
+
+隔离 Compose 项目 `v2board-a11-20261105` 使用 PHP **8.4.27** 与 MySQL **5.7.44** 验证当时的代码与依赖。完整 PHPUnit 通过 **201 项测试、1496 条断言**，包括真实 Laravel 异常处理器向数据库及文件写日志的敏感哨兵回归。单独运行 `php /source/docker/tests/security-log.php`，12 项检查通过：真实 MySQL 连接级临时表与单文件日志均不包含 POST 查询串、嵌套密码/密钥、JWT、验证码、异常消息或上下文哨兵，同时保留操作标识、主体/目标 ID 和异常元数据。测试使用合成值，没有连接生产数据。该脚本已加入 `docker/tests/run.sh`，安排在升级阶段之后。
+
+本轮运行 `docker/tests/run.sh` 在 `install.sh` / `prepare.sh` 的 Composer audit 阶段失败，原因是锁文件的 4 个包命中 7 条安全公告：`symfony/http-foundation` 4 条、`symfony/http-kernel`、`symfony/routing`、`symfony/yaml` 各 1 条。该次初始化、升级和运行验收阶段尚未开始；上述 PHPUnit 和专项脚本是当时在同一隔离项目中单独执行的结果。更新依赖后的完整复验结果见上一节。
+
+---
+
 日期：2026-11-03（Asia/Shanghai）。工作分支：`fix`。最终完整复验使用全新的 Compose 项目 `v2board-fix-final`，代码复制到独立 Linux 数据卷；未连接或修改真实服务器数据。
 
 ## 结论与版本选择

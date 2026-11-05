@@ -142,7 +142,7 @@ class SubscriptionAuditService
         }
         try {
             // 不写异常消息/堆栈/请求：SQL 或队列异常文本可能包含元数据。
-            Log::channel('daily')->warning($message, ['error_type' => get_class($error)]);
+            Log::channel('daily')->warning($message, ['exception' => $error]);
         } catch (\Throwable $ignored) {
         }
     }

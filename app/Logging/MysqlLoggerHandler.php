@@ -1,7 +1,6 @@
 <?php
 namespace App\Logging;
 
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Monolog\Handler\AbstractProcessingHandler;
 use Monolog\Logger;
@@ -13,25 +12,24 @@ class MysqlLoggerHandler extends AbstractProcessingHandler
     public function __construct($level = Logger::DEBUG, bool $bubble = true)
     {
         parent::__construct($level, $bubble);
+        $this->pushProcessor(new SafeLogProcessor());
     }
 
     protected function write(LogRecord $record): void
     {
         $record = $record->toArray();
         try{
-            if(isset($record['context']['exception']) && is_object($record['context']['exception'])){
-                $record['context']['exception'] = (array)$record['context']['exception'];
-            }
-            $record['request_data'] = request()->all() ??[];
+            $method = request()->getMethod();
+            $method = in_array($method, ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'], true) ? $method : '';
             $log = [
                 'title' => $record['message'],
                 'level' => $record['level_name'],
-                'host' => $record['request_host'] ?? request()->getSchemeAndHttpHost(),
-                'uri' => $record['request_uri'] ?? request()->getRequestUri(),
-                'method' => $record['request_method'] ?? request()->getMethod(),
+                'host' => null,
+                'uri' => $record['context']['action'] ?? '',
+                'method' => $method,
                 'ip' => request()->getClientIp(),
-                'data' => json_encode($record['request_data']) ,
-                'context' => isset($record['context']) ? json_encode($record['context']) : '',
+                'data' => '{}',
+                'context' => json_encode($record['context']),
                 'created_at' => $record['datetime']->getTimestamp(),
                 'updated_at' => $record['datetime']->getTimestamp(),
             ];
@@ -39,8 +37,8 @@ class MysqlLoggerHandler extends AbstractProcessingHandler
             LogModel::insert(
                 $log
             );
-        }catch (\Exception $e){
-            Log::channel('daily')->error($e->getMessage().$e->getFile().$e->getTraceAsString());
+        }catch (\Throwable $e){
+            Log::channel('daily')->error('System log database write failed');
         }
     }
 }

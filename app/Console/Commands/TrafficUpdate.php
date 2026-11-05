@@ -76,7 +76,7 @@ class TrafficUpdate extends Command
             DB::commit();
         } catch (\Exception $e) {
             DB::rollBack();
-            \Log::error('流量更新失败: ' . $e->getMessage());
+            \Log::error('Traffic update failed', ['exception' => $e]);
             return;
         }
     }

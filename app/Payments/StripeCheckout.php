@@ -90,7 +90,7 @@ class StripeCheckout {
         try {
             $session = Session::create($params, ['stripe_version' => self::STRIPE_API_VERSION]);
         } catch (\Exception $e) {
-            info($e);
+            info('Stripe checkout session failed', ['exception' => $e]);
             abort(500, "Failed to create order. Error: {$e->getMessage()}");
         }
         return [

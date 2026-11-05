@@ -451,9 +451,10 @@ class UserController extends Controller
         try {
             $orderService->sendPaymentNotification($order);
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('佣金划转通知发送失败: ' . $e->getMessage(), [
-                'trade_no' => $order->trade_no,
-                'user_id' => $user->id
+            \Illuminate\Support\Facades\Log::error('Commission transfer notification failed', [
+                'exception' => $e,
+                'actor_id' => $user->id,
+                'target_id' => $order->id,
             ]);
         }
 

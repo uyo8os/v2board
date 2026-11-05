@@ -9,6 +9,7 @@ compose build test
 compose up -d mysql redis
 compose run --rm test sh /source/docker/tests/install.sh
 compose run --rm test sh docker/tests/upgrade.sh
+compose run --rm test php docker/tests/security-log.php
 compose up -d php-fpm workerman horizon nginx
 compose exec -T php-fpm php docker/tests/configure-proxy.php
 compose restart php-fpm workerman horizon

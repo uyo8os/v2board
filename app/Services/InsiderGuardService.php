@@ -11,7 +11,6 @@ use App\Models\ServerV2node;
 use App\Models\ServerVless;
 use App\Models\ServerVmess;
 use App\Models\User;
-use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -302,13 +301,11 @@ class InsiderGuardService
     }
 
     /**
-     * 写入失败只记底层错误，去掉引号里的片段（Duplicate entry '…' 之类会带 IP / UA），同一类错误 5 分钟内只记一次；
+     * 写入失败通过安全日志处理器记录异常类型和位置，同一类错误 5 分钟内只记一次；
      * 缓存不可用时退回进程内限频，避免每个请求都写日志
      */
     private static function logWriteError(string $message, \Throwable $e): void
     {
-        $error = $e instanceof QueryException && $e->getPrevious() ? $e->getPrevious()->getMessage() : $e->getMessage();
-        $error = preg_replace("/'[^']*'/", "'…'", $error);
         try {
             if (!Cache::add('insider_guard_write_error:' . md5($message), 1, self::LOG_THROTTLE_SECONDS)) return;
         } catch (\Throwable $ignore) {
@@ -316,8 +313,7 @@ class InsiderGuardService
             self::$lastLogAt[$message] = time();
         }
         try {
-            // 默认 MySQL 日志通道会自动保存完整请求，改用文件通道避免密码 / 订阅 token 被附带记录。
-            Log::channel('daily')->warning($message, ['error' => $error]);
+            Log::channel('daily')->warning($message, ['exception' => $e]);
         } catch (\Throwable $ignore) {
             // 日志目录不可写或磁盘已满时，仍保留审计容错及限制查询的 503 行为。
         }

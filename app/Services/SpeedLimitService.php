@@ -211,7 +211,7 @@ class SpeedLimitService
             }
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('动态限速流量统计失败: ' . $e->getMessage());
+            Log::error('Speed limit traffic statistics failed', ['exception' => $e]);
         }
     }
 
@@ -294,7 +294,7 @@ class SpeedLimitService
             $message = "动态限速\n———————————————\n邮箱: {$email}\n规则：{$rule->name}\n触发流量：{$total}\n限速时间：" . date('Y-m-d H:i:s', $record->triggered_at) . "\n解除时间：" . date('Y-m-d H:i:s', $record->release_at);
             (new TelegramService())->sendMessageWithAdmin($message);
         } catch (\Exception $e) {
-            Log::error('动态限速触发通知发送失败: ' . $e->getMessage());
+            Log::error('Speed limit notification failed', ['exception' => $e]);
         }
     }
 

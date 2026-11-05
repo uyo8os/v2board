@@ -105,7 +105,7 @@ class CheckRenewal extends Command
                 } catch (\Exception $e) {
                     $user->auto_renewal = 0;
                     if(!$user->save()){
-                        info('用户自动续费失败,调整设置失败', [$e->getMessage() , $user]);
+                        info('Automatic renewal settings update failed', ['exception' => $e, 'target_id' => $user->id]);
                     };
                 }
             }

@@ -274,8 +274,9 @@ class OrderService
         try {
             $this->sendPaymentNotification($order);
         } catch (\Throwable $e) {
-            Log::error('支付成功通知发送失败: ' . $e->getMessage(), [
-                'trade_no' => $order->trade_no
+            Log::error('Payment notification failed', [
+                'exception' => $e,
+                'target_id' => $order->id,
             ]);
         }
         return true;

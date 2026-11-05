@@ -16,8 +16,11 @@ class RequestLog
     public function handle($request, Closure $next)
     {
         if ($request->method() === 'POST') {
-            $path = $request->path();
-            info("POST {$path}");
+            info('Admin POST request', [
+                'action' => $request->route() ? $request->route()->getActionName() : null,
+                'actor_id' => $request->input('user.id'),
+                'target_id' => $request->input('id'),
+            ]);
         };
         return $next($request);
     }

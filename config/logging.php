@@ -47,12 +47,14 @@ return [
 
         'single' => [
             'driver' => 'single',
+            'tap' => [App\Logging\SafeLogTap::class],
             'path' => storage_path('logs/laravel.log'),
             'level' => 'debug',
         ],
 
         'daily' => [
             'driver' => 'daily',
+            'tap' => [App\Logging\SafeLogTap::class],
             'path' => storage_path('logs/laravel.log'),
             'level' => 'debug',
             'days' => 14,
@@ -60,6 +62,7 @@ return [
 
         'slack' => [
             'driver' => 'slack',
+            'tap' => [App\Logging\SafeLogTap::class],
             'url' => env('LOG_SLACK_WEBHOOK_URL'),
             'username' => 'Laravel Log',
             'emoji' => ':boom:',
@@ -68,6 +71,7 @@ return [
 
         'papertrail' => [
             'driver' => 'monolog',
+            'tap' => [App\Logging\SafeLogTap::class],
             'level' => 'debug',
             'handler' => SyslogUdpHandler::class,
             'handler_with' => [
@@ -78,6 +82,7 @@ return [
 
         'stderr' => [
             'driver' => 'monolog',
+            'tap' => [App\Logging\SafeLogTap::class],
             'handler' => StreamHandler::class,
             'formatter' => env('LOG_STDERR_FORMATTER'),
             'with' => [
@@ -87,11 +92,13 @@ return [
 
         'syslog' => [
             'driver' => 'syslog',
+            'tap' => [App\Logging\SafeLogTap::class],
             'level' => 'debug',
         ],
 
         'errorlog' => [
             'driver' => 'errorlog',
+            'tap' => [App\Logging\SafeLogTap::class],
             'level' => 'debug',
         ],
     ],

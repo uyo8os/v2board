@@ -15,6 +15,9 @@ $app = new Illuminate\Foundation\Application(
     $_ENV['APP_BASE_PATH'] ?? dirname(__DIR__)
 );
 
+// Laravel's emergency logger bypasses channel taps, so protect that fallback too.
+$app->singleton('log', fn ($app) => new App\Logging\SafeLogManager($app));
+
 /*
 |--------------------------------------------------------------------------
 | Bind Important Interfaces

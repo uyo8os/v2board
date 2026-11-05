@@ -47,7 +47,6 @@ class StripeCredit {
 
     public function pay($order)
     {
-        info($order);
         $currency = $this->config['currency'];
         $exchange = $this->exchange('CNY', strtoupper($currency));
         if (!$exchange) {
@@ -66,7 +65,7 @@ class StripeCredit {
                 ]
             ], ['stripe_version' => self::STRIPE_API_VERSION]);
         } catch (\Exception $e) {
-            info($e);
+            info('Stripe charge failed', ['exception' => $e]);
             abort(500, __('Payment failed. Please check your credit card information'));
         }
         if (!$charge->paid) {

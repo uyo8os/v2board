@@ -42,12 +42,11 @@ class V2boardStatistics extends Command
      */
     public function handle()
     {
-        $startAt = microtime(true);
         ini_set('memory_limit', -1);
         //$this->statUser();
         //$this->statServer();
         $this->stat();
-        info('统计任务执行完毕。耗时:' . (microtime(true) - $startAt) / 1000);
+        info('Traffic statistics completed');
     }
 
     private function statServer()
@@ -78,7 +77,7 @@ class V2boardStatistics extends Command
             $statService->clearStatServer();
         } catch (\Exception $e) {
             DB::rollback();
-            \Log::error($e->getMessage(), ['exception' => $e]);
+            \Log::error('Statistics update failed', ['exception' => $e]);
         }
     }
 
@@ -110,7 +109,7 @@ class V2boardStatistics extends Command
             $statService->clearStatUser();
         } catch (\Exception $e) {
             DB::rollback();
-            \Log::error($e->getMessage(), ['exception' => $e]);
+            \Log::error('Statistics update failed', ['exception' => $e]);
         }
     }
 
@@ -134,7 +133,7 @@ class V2boardStatistics extends Command
             }
             Stat::create($data);
         } catch (\Exception $e) {
-            \Log::error($e->getMessage(), ['exception' => $e]);
+            \Log::error('Statistics update failed', ['exception' => $e]);
         }
     }
 }

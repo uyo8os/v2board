@@ -6,7 +6,9 @@
 
 交付性质：原始审计发现与后续整改跟踪。审计阶段未修改业务代码；后续修复状态以本报告的整改记录为准。
 
-**整改更新（2026-11-04）：A01、A03 已完成代码修复与本地回归，待部署环境验收。** A01 取消授权结果缓存、每请求验签/查会话/从主库读取当前角色与禁用状态，会话目录写操作增加用户级互斥锁，详见 [A01 修复日志](../changelog/2026-11-04-auth-session-authorization-fix.md)。A03 按上游最小补丁补齐 V2node 用户输出的 TLS 私钥与 DNS 凭据过滤，节点端保留原始配置，详见 [A03 修复日志](../changelog/2026-11-04-node-client-secrets-fix.md)。原始 18 项修复事项中，当前剩余 16 项待修复（8 项 P1、8 项 P2）；A14 仍为策略观察。以下原始发现基于文首审计基线，不能将 A01、A03 的历史缺陷描述误认为新代码的当前行为。
+**整改更新（2026-11-04）：A01、A03 已完成代码修复与本地回归，待部署环境验收。** A01 取消授权结果缓存、每请求验签/查会话/从主库读取当前角色与禁用状态，会话目录写操作增加用户级互斥锁，详见 [A01 修复日志](../changelog/2026-11-04-auth-session-authorization-fix.md)。A03 按上游最小补丁补齐 V2node 用户输出的 TLS 私钥与 DNS 凭据过滤，节点端保留原始配置，详见 [A03 修复日志](../changelog/2026-11-04-node-client-secrets-fix.md)。截至本次更新，原始 18 项修复事项剩余 16 项待修复（8 项 P1、8 项 P2）；A14 仍为策略观察。以下原始发现基于文首审计基线，不应将历史缺陷描述误认为当前行为。
+
+**整改更新（2026-11-05）：** A11 已完成代码修复、隔离回归与完整 Docker 安装/升级/运行验收，原始 18 项中剩余 15 项待修复（8 项 P1、7 项 P2）。首次完整 Docker 验收被 Composer 安全公告阻断；更新四个 Symfony 锁定依赖并修正验收脚本后，完整复验通过，详见 [A11 修复日志](../changelog/2026-11-05-system-log-security-fix.md)。原始发现与本报告第 2 节的环境说明仍保留为审计时的历史记录；部署、历史日志处置和按实际暴露范围轮换凭据需要单独完成。
 
 ## 1. 结论与阅读方式
 
@@ -57,7 +59,7 @@
 | A08 | P1 | 支付与取消订单竞态可出现退款后仍开通 | 同一待支付订单并发进入两条路径 | 静态 | 待修复 |
 | A09 | P1 | 礼品卡读取和扣减无锁，首次兑换可并发超额 | 持有有效限次礼品卡，多个账户并发 | 静态 | 待修复 |
 | A10 | P1 | 部分网关未拒绝空回调密钥 | 对应通道被启用且密钥为空 | 静态、条件 | 待修复 |
-| A11 | P2 | 默认数据库日志保存密码、密钥和完整查询串 | 敏感请求发生日志写入；后台 POST 默认记录 | 动态 | 待修复 |
+| A11 | P2 | 默认数据库日志保存密码、密钥和完整查询串 | 敏感请求发生日志写入；后台 POST 默认记录 | 动态 | 已修复（验收见修复日志） |
 | A12 | P2 | 无 GD 时验证码 SVG 直接包含答案 | 生产缺少 GD 或 PNG 分支失败 | 动态、条件 | 待修复 |
 | A13 | P2 | V2 认证失败 exit 终止 Webman worker | 请求通过 Webman 承载 | 静态、条件 | 待修复 |
 | A14 | 策略观察 | InsiderGuard 仅替换订阅地址，保留真实用户节点列表 | 被限制用户仍有网站 JWT 和有效套餐 | 静态，设计意图已注明 | 待产品确认 |
@@ -209,6 +211,8 @@ CoinPayments 尤其需要优先复核：金额、币种和 `item_number` 通过�
 
 **验收：** 密码、邮件/节点/支付 key、JWT、验证码的哨兵值都不得出现在数据库/文件/异常日志，保留有用操作信息。已用真实 RequestLog + MysqlLoggerHandler 写入内存库，确认四类哨兵被保存。
 
+**整改记录（2026-11-05）：** 系统日志改为字段及固定事件标题白名单，默认数据库日志不再保存完整请求、URL 查询串、任意上下文或异常消息/堆栈；配置中的日志通道及 Laravel emergency 文件通道同样应用处理器。保留经验证的后台操作标识、主体/目标 ID 和异常类型及位置等有限信息，原自由文本被省略会减少排障细节。覆盖范围不包含独立邮件/失败队列日志、第三方直接写文件、自建未配置的通道或外部服务日志。测试及实际 Docker 结果见 [修复日志](../changelog/2026-11-05-system-log-security-fix.md)；历史数据和可能暴露的凭据仍需按实际情况处理，详见 [日志说明](../logging.md)。
+
 ### A12 / P2 — SVG 验证码缺少人机验证作用
 
 **代码位置：** `app/Http/Controllers/V1/Guest/CaptchaController.php:40-68`；`app/Services/LocalCaptchaService.php:106-126`；`docs/install.md:33`。
@@ -321,7 +325,7 @@ Bot 接受订阅 URL 的 token 并把未绑定账号的 telegram_id 设置为当
 - **历史支付修复：** 现有 EPay/EPayQrcode/BEasy 签名类型、空密钥和成功状态测试已通过；签名算法保护不等于本报告 A06—A10 的订单闭环与并发问题已解决。
 - **Horizon：** `config/horizon.php:92` 已加 admin 中间件，不能仅因为 APP_ENV=local 或默认 gate 逻辑就报告匿名公开。
 - **Webman 可信代理：** 当前 `TrustProxies.php:28-45` 已限制到配置的代理，默认 loopback，不信任 forwarded Host/Port；相关回归通过。A13 是独立的进程生命周期问题。
-- **依赖公告：** 对锁文件和实际安装依赖分别执行 Composer audit，均退出 0，返回 advisories/abandoned/filter/cooldown 空数组。它说明查询时未命中已知公告，不代表业务逻辑安全。[Composer 官方 audit 文档](https://getcomposer.org/doc/03-cli.md#audit)说明了 installed 与 --locked 的区别。
+- **依赖公告：** 原审计时对锁文件和实际安装依赖分别执行 Composer audit，均退出 0，返回 advisories/abandoned/filter/cooldown 空数组，只代表当时查询的结果。2026-11-05 的首次 Docker 验收命中新的公告，更新四个 Symfony 依赖后交付锁文件 audit 无公告，见 [Docker 验收记录](../../docker/ACCEPTANCE.md)。[Composer 官方 audit 文档](https://getcomposer.org/doc/03-cli.md#audit)说明了 installed 与 --locked 的区别。
 
 ## 7. 仍需部署/产品确认的事项
 
@@ -353,7 +357,7 @@ A03 最小补丁完成后的完整 Unit 回归：**195 项测试、1450 个断�
 ### 离线审计与回归脚本
 
 - [`auth-audit-proof.php`](auth-audit-proof.php)：真实 AuthService、Admin 中间件、后台用户更新与找回控制器，SQLite `:memory:` / array cache / 合成用户；修复后 **12 项布尔检查均成立**，包含 A01 拒绝断言及 A02 仍存在的风险观测。
-- [`input-audit-proof.php`](input-audit-proof.php)：真实 RequestLog/MysqlLoggerHandler、验证码控制器及 User 中间件；修复后 **8 项布尔检查均成立**，缓存键不能认证的 A01 项已改为拒绝断言，日志/验证码问题仍为风险观测。GD 未加载时验证 SVG 分支。
+- [`input-audit-proof.php`](input-audit-proof.php)：真实 RequestLog/MysqlLoggerHandler、验证码控制器及 User 中间件；修复后 **8 项布尔检查均成立**，A01、A11 项为拒绝行为断言，验证码问题仍为风险观测。GD 未加载时验证 SVG 分支。
 
 ```powershell
 php -d extension=php_pdo_sqlite.dll docs/security/auth-audit-proof.php
@@ -363,6 +367,8 @@ php -d extension=php_pdo_sqlite.dll docs/security/input-audit-proof.php
 这两个文件同时保留已修项目的安全断言与未修项目的风险观测，**true 表示该键描述的行为成立，不能一概理解为漏洞仍在或已经安全**。A01 的正式拒绝测试已纳入 Unit 套件，其他项目修复时应同步更新预期。文件限 CLI、使用合成值，不加载站点 bootstrap/.env、不访问真实服务。A03 已另补内存数据库中的用户列表、订阅与节点配置接口回归，见修复日志；真实节点、支付网关及 MySQL/Redis 并发项仍未据此完成端到端验收。
 
 ### 依赖公告查询
+
+以下为 2026-11-04 审计时的历史结果；2026-11-05 的首次 Docker 完整验收因新公告在 Composer audit 阶段失败，更新受影响依赖后的复验已通过，详见 [Docker 验收记录](../../docker/ACCEPTANCE.md)。
 
 ```text
 composer --no-plugins --no-scripts audit --locked --format=json
@@ -384,7 +390,7 @@ composer --no-plugins --no-scripts audit --format=json
   A01 已完成代码修复与本地回归，见上方整改记录；该批仍因 A02、A17 待修复而保持未完成。
 - [ ] **第 2 批：A03、A11 — 收紧敏感数据输出。** 用户 DTO、日志脱敏、历史数据处理和按实际范围轮换密钥。
 
-  A03 已完成上游最小过滤补丁和本地回归；该批仍因 A11、历史数据/凭据处置及部署验收未完成而保持未完成。
+  A03、A11 已完成代码修复；该批仍因历史数据/凭据处置及部署验收未完成而保持未完成。
 - [ ] **第 3 批：A06、A07、A10、A16 — 支付信任边界。** 每适配器 schema、最终到账语义、付款意图绑定和 HTTPS；未修的受影响通道可先关闭。
 - [ ] **第 4 批：A08、A09、A18、A19 — 交易并发与金额不变量。** 在隔离 MySQL/Redis 中做双连接交错、重放、叠加折扣、队列重试和失败恢复，权益与账本一致。
 - [ ] **第 5 批：A04、A05 — 节点最小权限。** 独立节点身份与上报校验；跨节点测试和凭据轮换。存在不可信合作节点时把此批提前。

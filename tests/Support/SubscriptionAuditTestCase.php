@@ -51,7 +51,11 @@ abstract class SubscriptionAuditTestCase extends TestCase
         $this->logger = new class {
             public $warnings = [];
             public function channel($name) { return $this; }
-            public function warning($message, array $context = []) { $this->warnings[] = [$message, $context]; }
+            public function warning($message, array $context = []) {
+                $record = new \Monolog\LogRecord(new \DateTimeImmutable(), 'daily', \Monolog\Level::Warning, $message, $context);
+                $safe = (new \App\Logging\SafeLogProcessor())($record);
+                $this->warnings[] = [$safe->message, $safe->context];
+            }
         };
         $this->container->instance('log', $this->logger);
         $dispatcher = Mockery::mock(DispatcherContract::class);

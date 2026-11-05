@@ -24,7 +24,7 @@ class CaptchaController extends Controller
                 $code = LocalCaptchaService::generateCode($request);
             }
         } catch (\Throwable $e) {
-            \Log::error('Captcha generation/session failed: ' . $e->getMessage());
+            \Log::error('Captcha generation/session failed', ['exception' => $e]);
         }
         
         // 生成验证码
@@ -35,7 +35,7 @@ class CaptchaController extends Controller
             \Cache::put('captcha_' . $key, strtolower($code), 300); // 5分钟过期
             \Cache::put('captcha_time_' . $key, time(), 300);
         } catch (\Throwable $e) {
-            \Log::error('Captcha cache store failed: ' . $e->getMessage());
+            \Log::error('Captcha cache store failed', ['exception' => $e]);
         }
 
         // 渲染图片
@@ -50,7 +50,7 @@ class CaptchaController extends Controller
                     'X-Captcha-Key' => $key, // 返回 key 给前端
                 ]);
             } catch (\Throwable $e) {
-                \Log::error('Captcha PNG render failed: ' . $e->getMessage());
+                \Log::error('Captcha PNG render failed', ['exception' => $e]);
             }
         }
 

@@ -122,7 +122,9 @@ class SubscriptionAuditServiceTest extends SubscriptionAuditTestCase
         $this->assertNull($service->record($this->event()));
         $this->assertCount(1, $this->logger->warnings);
         $this->assertStringNotContainsString('private-credential', json_encode($this->logger->warnings));
-        $this->assertSame(['error_type' => RuntimeException::class], $this->logger->warnings[0][1]);
+        $this->assertSame(RuntimeException::class, $this->logger->warnings[0][1]['exception_type']);
+        $this->assertArrayHasKey('exception_file', $this->logger->warnings[0][1]);
+        $this->assertArrayHasKey('exception_line', $this->logger->warnings[0][1]);
     }
 
     public function testLoggerFailureWhileHandlingAQueueFailureDoesNotEscape(): void

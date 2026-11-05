@@ -1,10 +1,10 @@
 <?php
-/** A01 rejection regression and still-open logging/captcha observations. Synthetic data only. */
+/** A01 and A11 rejection regressions and the still-open captcha observation. Synthetic data only. */
 require dirname(__DIR__, 2) . '/vendor/autoload.php';
 
 use App\Http\Controllers\V1\Guest\CaptchaController;
 use App\Http\Middleware\RequestLog;
-use App\Logging\MysqlLoggerHandler;
+use App\Logging\MysqlLogger;
 use App\Services\LocalCaptchaService;
 use Illuminate\Cache\ArrayStore;
 use Illuminate\Cache\Repository;
@@ -17,7 +17,6 @@ use Illuminate\Foundation\Application;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Facade;
-use Monolog\Logger;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 if (PHP_SAPI !== 'cli') { exit(1); }
@@ -48,7 +47,7 @@ $db->schema()->create('v2_log', static function (Blueprint $table) {
     $table->integer('created_at');
     $table->integer('updated_at');
 });
-$logger = new Logger('offline-audit', [new MysqlLoggerHandler()]);
+$logger = (new MysqlLogger())([]);
 $app->instance('log', $logger);
 $request = Request::create('https://audit.example.test/api/v1/dummy-admin/config/save?auth_data=dummy-jwt', 'POST', [
     'email_password' => 'dummy-mail-password',
@@ -58,12 +57,12 @@ $request = Request::create('https://audit.example.test/api/v1/dummy-admin/config
 $app->instance('request', $request);
 (new RequestLog())->handle($request, static fn () => new Response('ok'));
 $row = $db->table('v2_log')->first();
-$stored = json_decode($row->data, true);
+$stored = json_encode($row);
 $results = [
-    'default_request_log_stores_password' => ($stored['password'] ?? null) === 'dummy-password',
-    'default_request_log_stores_mail_secret' => ($stored['email_password'] ?? null) === 'dummy-mail-password',
-    'default_request_log_stores_node_secret' => ($stored['server_token'] ?? null) === 'dummy-node-token',
-    'default_request_log_uri_stores_query_credential' => str_contains($row->uri, 'dummy-jwt'),
+    'default_request_log_omits_password' => !str_contains($stored, 'dummy-password'),
+    'default_request_log_omits_mail_secret' => !str_contains($stored, 'dummy-mail-password'),
+    'default_request_log_omits_node_secret' => !str_contains($stored, 'dummy-node-token'),
+    'default_request_log_omits_query_credential' => !str_contains($stored, 'dummy-jwt'),
 ];
 // Exercise the SVG fallback as returned by the real controller when GD is absent.
 $captcha = Request::create('https://audit.example.test/api/v1/guest/captcha?key=offline-proof');

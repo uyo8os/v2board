@@ -2,6 +2,12 @@
 
 按日期简要记录本分支的变更，详细更新日志放在 [changelog](changelog/) 目录。
 
+## 2026 年 11 月 05 日
+
+修复安全审计 A11：系统日志改用允许字段和固定事件标题，避免请求参数、URL 查询串及异常详情中的凭据进入受保护的日志通道。历史日志与独立业务日志仍需按实际范围处理。详见 [系统日志安全修复日志](changelog/2026-11-05-system-log-security-fix.md) 和 [日志说明](logging.md)。
+
+更新四个命中安全公告的 Symfony 锁定依赖，保留 Composer 安全检查。详见 [Symfony 安全依赖更新日志](changelog/2026-11-05-symfony-security-updates.md)。
+
 ## 2026 年 11 月 04 日
 
 修复安装、Composer 依赖安装与更新、数据库升级和运行兼容问题，升级至 Laravel 13 并适配 PHP 8.4，保留原有业务功能。完成 Docker 安装、升级及运行验收，补充宝塔安装和从 `master` 迁移到 `fix` 的更新文档。

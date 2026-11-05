@@ -113,6 +113,10 @@ verify(DB::table('v2_insider_guard_subscribe_audit')->where('id', '>', $auditSta
 verify(!DB::table('v2_insider_guard_subscribe_audit')->where('id', '>', $auditStartId)->whereIn('ip_address', ['198.51.100.66', '198.51.100.77', '198.51.100.88'])->exists(), 'Queued audits ignore spoofed forwarding headers');
 verify(DB::table('failed_jobs')->count() === 0, 'No queue jobs failed');
 
-Illuminate\Support\Facades\Log::error('acceptance-mysql-logger');
-verify(DB::table('v2_log')->where('title', 'acceptance-mysql-logger')->exists(), 'Monolog 3 writes application errors to the original MySQL log');
+$lastLogId = (int) DB::table('v2_log')->max('id');
+Illuminate\Support\Facades\Log::error('acceptance-mysql-secret', ['password' => 'acceptance-context-secret']);
+$logRow = DB::table('v2_log')->where('id', '>', $lastLogId)->where('level', 'ERROR')->first();
+verify($logRow !== null, 'Monolog 3 writes application errors to the original MySQL log');
+$logJson = json_encode($logRow);
+verify(!str_contains($logJson, 'acceptance-mysql-secret') && !str_contains($logJson, 'acceptance-context-secret'), 'MySQL application log omits arbitrary messages and sensitive context');
 echo "ALL RUNTIME ACCEPTANCE CHECKS PASSED\n";
