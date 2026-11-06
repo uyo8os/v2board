@@ -693,6 +693,14 @@ CREATE TABLE IF NOT EXISTS `v2_insider_guard_restrict` (
   PRIMARY KEY (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='风控中心：假入口或节点排除限制';
 
+CREATE TABLE IF NOT EXISTS `v2_insider_guard_consumption_restrict` (
+  `user_id` int(11) NOT NULL,
+  `admin_id` int(11) DEFAULT NULL,
+  `reason` text NOT NULL,
+  `created_at` int(11) NOT NULL,
+  PRIMARY KEY (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='风控中心：消费限制';
+
 CREATE TABLE IF NOT EXISTS `v2_insider_guard_node_exclusion` (
   `user_id` int(11) NOT NULL,
   `node_type` varchar(40) NOT NULL,

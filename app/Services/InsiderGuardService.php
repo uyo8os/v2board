@@ -107,6 +107,17 @@ class InsiderGuardService
         }
     }
 
+    /** 消费限制独立于节点限制；无法确认时不允许创建消费订单。 */
+    public static function isConsumptionRestricted(int $userId): bool
+    {
+        try {
+            return DB::table('v2_insider_guard_consumption_restrict')->where('user_id', $userId)->exists();
+        } catch (\Throwable $e) {
+            self::logWriteError('InsiderGuard consumption restriction lookup unavailable', $e);
+            throw new HttpException(503, '暂时无法确认账号的风控状态，请稍后重试');
+        }
+    }
+
     /** 限制：记入限制表（已限制则只更新原因，保留首次限制时间） */
     public static function restrict(int $userId, int $adminId, string $reason): void
     {
@@ -407,6 +418,8 @@ class InsiderGuardService
         $counts['v2_insider_guard_restrict'] = DB::table('v2_insider_guard_restrict')
             ->whereNotIn('user_id', User::query()->select('id'))->delete();
         $counts['v2_insider_guard_node_exclusion'] = DB::table('v2_insider_guard_node_exclusion')
+            ->whereNotIn('user_id', User::query()->select('id'))->delete();
+        $counts['v2_insider_guard_consumption_restrict'] = DB::table('v2_insider_guard_consumption_restrict')
             ->whereNotIn('user_id', User::query()->select('id'))->delete();
         foreach ($targets as $table => [$column, $before, $orderBy]) {
             // 分批删，避免一条大 DELETE 长时间持锁；带 ORDER BY 让语句级 binlog 不报 unsafe

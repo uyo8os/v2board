@@ -9,6 +9,7 @@ use App\Models\Payment;
 use App\Models\Plan;
 use App\Models\User;
 use App\Services\CouponService;
+use App\Services\InsiderGuardService;
 use App\Services\OrderService;
 use App\Services\PaymentService;
 use App\Services\PlanService;
@@ -76,6 +77,9 @@ class OrderController extends Controller
 
     public function save(OrderSave $request)
     {
+        if (InsiderGuardService::isConsumptionRestricted((int) $request->user['id'])) {
+            abort(422, '当前账号已限制消费');
+        }
         $userService = new UserService();
         if ($userService->isNotCompleteOrderByUserId($request->user['id'])) {
             abort(500, __('You have an unpaid or pending order, please try again later or cancel it'));

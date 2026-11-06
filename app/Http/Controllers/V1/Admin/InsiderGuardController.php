@@ -56,7 +56,11 @@ class InsiderGuardController extends Controller
             'data' => [
                 'recent_events' => (int)$recent,
                 'reviews' => DB::table('v2_insider_guard_review')->count(),
-                'restricted' => DB::table('v2_insider_guard_restrict')->count(),
+                'restricted' => DB::query()->fromSub(
+                    DB::table('v2_insider_guard_restrict')->select('user_id')
+                        ->union(DB::table('v2_insider_guard_consumption_restrict')->select('user_id')),
+                    'restricted_users'
+                )->count(),
                 'incidents' => $incidents,
             ]
         ]);
@@ -77,7 +81,8 @@ class InsiderGuardController extends Controller
         // 限制标记不进缓存，限制 / 解除后列表立刻能反映
         $userIds = array_column($rows, 'user_id');
         $restricted = $userIds
-            ? DB::table('v2_insider_guard_restrict')->whereIn('user_id', $userIds)->pluck('user_id')->flip()->all()
+            ? DB::table('v2_insider_guard_restrict')->whereIn('user_id', $userIds)->pluck('user_id')
+                ->merge(DB::table('v2_insider_guard_consumption_restrict')->whereIn('user_id', $userIds)->pluck('user_id'))->flip()->all()
             : [];
         // SQL 已按「超阈值维度数 DESC, pulls DESC」排好，等于评分降序，这里不再排
         $items = collect($rows)->map(function ($r) use ($threshold, $restricted) {
@@ -187,6 +192,8 @@ class InsiderGuardController extends Controller
                 'banned' => (int)$user->banned,
                 'risk' => InsiderGuardService::score($id),
                 'restriction' => $this->restriction($id),
+                'consumption_restriction' => DB::table('v2_insider_guard_consumption_restrict')->where('user_id', $id)
+                    ->first(['admin_id', 'reason', 'created_at']),
                 'events' => $events,
                 'deliveries' => $deliveries,
                 'reviews' => DB::table('v2_insider_guard_review')
@@ -202,12 +209,16 @@ class InsiderGuardController extends Controller
         $pageSize = $this->positiveInt($request->input('pageSize', 20));
         if ($current === null || $pageSize === null) abort(422, '分页参数无效');
         $pageSize = max(10, min(100, $pageSize));
-        $query = DB::table('v2_insider_guard_restrict');
+        $nodeRestrictions = DB::table('v2_insider_guard_restrict')
+            ->select('user_id', 'admin_id', 'reason', 'created_at', 'mode');
+        $consumptionRestrictions = DB::table('v2_insider_guard_consumption_restrict')
+            ->select('user_id', 'admin_id', 'reason', 'created_at')->selectRaw("'consumption' as mode");
+        $query = DB::query()->fromSub($nodeRestrictions->unionAll($consumptionRestrictions), 'restrictions');
         $total = (clone $query)->count();
-        $rows = $query->orderByDesc('created_at')->orderByDesc('user_id')
+        $rows = $query->orderByDesc('created_at')->orderByDesc('user_id')->orderBy('mode')
             ->forPage($current, $pageSize)->get(['user_id', 'admin_id', 'reason', 'created_at', 'mode']);
         $exclusions = $this->excludedNodes($rows->pluck('user_id')->all());
-        foreach ($rows as $row) $row->excluded_nodes = $exclusions[$row->user_id] ?? [];
+        foreach ($rows as $row) $row->excluded_nodes = $row->mode === 'exclude' ? ($exclusions[$row->user_id] ?? []) : [];
         return response([
             'data' => $this->withEmails($rows),
             'total' => $total,
@@ -303,6 +314,38 @@ class InsiderGuardController extends Controller
         return response([
             'data' => true
         ]);
+    }
+
+    /** 消费限制与节点限制相互独立，操作及审核记录在同一事务中提交。 */
+    public function consumptionRestrict(Request $request)
+    {
+        $id = $this->userId($request);
+        $reason = $this->reason($request, 8, '限制原因需 8～1000 字');
+        $adminId = (int)$request->user['id'];
+        $user = User::find($id);
+        if (!$user) abort(500, '用户不存在');
+        if ($id === $adminId || $user->is_admin) abort(422, '不能限制管理员账号');
+        DB::transaction(function () use ($id, $adminId, $reason) {
+            DB::table('v2_insider_guard_consumption_restrict')->upsert(
+                [['user_id' => $id, 'admin_id' => $adminId, 'reason' => $reason, 'created_at' => time()]],
+                ['user_id'], ['admin_id', 'reason']
+            );
+            $this->logReview($id, $adminId, 'consumption_restrict', $reason);
+        });
+        return response(['data' => true]);
+    }
+
+    public function consumptionRelease(Request $request)
+    {
+        $id = $this->userId($request);
+        $reason = $this->reason($request, 8, '解除原因需 8～1000 字');
+        if (!User::find($id)) abort(500, '用户不存在');
+        $adminId = (int)$request->user['id'];
+        DB::transaction(function () use ($id, $adminId, $reason) {
+            if (!DB::table('v2_insider_guard_consumption_restrict')->where('user_id', $id)->delete()) abort(422, '该用户未被限制消费');
+            $this->logReview($id, $adminId, 'consumption_release', $reason);
+        });
+        return response(['data' => true]);
     }
 
     /** 登记节点异常（如节点被封） */

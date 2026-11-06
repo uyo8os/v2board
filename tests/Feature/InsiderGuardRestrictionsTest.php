@@ -28,6 +28,7 @@ class InsiderGuardRestrictionsTest extends TestCase
         Cache::flush();
         DB::statement('CREATE TABLE v2_user (id INTEGER PRIMARY KEY, email TEXT, is_admin INTEGER DEFAULT 0, is_staff INTEGER DEFAULT 0, banned INTEGER DEFAULT 0)');
         DB::statement("CREATE TABLE v2_insider_guard_restrict (user_id INTEGER PRIMARY KEY, admin_id INTEGER, reason TEXT, created_at INTEGER, mode TEXT NOT NULL DEFAULT 'decoy')");
+        DB::statement('CREATE TABLE v2_insider_guard_consumption_restrict (user_id INTEGER PRIMARY KEY, admin_id INTEGER, reason TEXT, created_at INTEGER)');
         DB::statement('CREATE TABLE v2_insider_guard_node_exclusion (user_id INTEGER, node_type TEXT, node_id INTEGER, PRIMARY KEY(user_id,node_type,node_id))');
         foreach (['shadowsocks', 'vmess', 'trojan', 'tuic', 'hysteria', 'vless', 'anytls', 'v2node'] as $type) {
             DB::statement("CREATE TABLE v2_server_{$type} (id INTEGER PRIMARY KEY, name TEXT)");
@@ -184,5 +185,65 @@ class InsiderGuardRestrictionsTest extends TestCase
         $this->assertDatabaseHas('v2_insider_guard_restrict', ['user_id' => 2, 'mode' => 'decoy', 'reason' => '旧原因']);
         $this->assertDatabaseCount('v2_insider_guard_node_exclusion', 0);
         $this->assertDatabaseCount('v2_insider_guard_review', 0);
+    }
+
+    public function test_consumption_and_node_restrictions_are_independent_and_audited(): void
+    {
+        $routes = [];
+        foreach ($this->app['router']->getRoutes() as $route) $routes[$route->getActionName()] = '/' . ltrim($route->uri(), '/');
+        $prefix = 'App\\Http\\Controllers\\V1\\Admin\\InsiderGuardController@';
+        $auth = ['authorization' => $this->token(1)];
+        $body = ['id' => 2, 'reason' => '经审核需要限制该用户消费'];
+        $this->postJson($routes[$prefix . 'consumptionRestrict'], $body)->assertForbidden();
+        $this->postJson($routes[$prefix . 'consumptionRestrict'], $body, ['authorization' => $this->token(2)])->assertForbidden();
+        $this->postJson($routes[$prefix . 'consumptionRestrict'], ['id' => 1, 'reason' => $body['reason']], $auth)->assertStatus(422);
+        $this->postJson($routes[$prefix . 'consumptionRestrict'], ['id' => 2, 'reason' => '太短'], $auth)->assertStatus(422);
+        $this->postJson($routes[$prefix . 'consumptionRestrict'], $body, $auth)->assertOk();
+        $this->assertTrue(InsiderGuardService::isConsumptionRestricted(2));
+        $this->postJson($routes[$prefix . 'restrict'], ['id' => 2, 'confirm' => 1, 'reason' => '根据风险审查使用假入口限制'], $auth)->assertOk();
+        $this->getJson($this->endpoint, $auth)->assertOk()->assertJsonPath('total', 2);
+        $this->assertDatabaseHas('v2_insider_guard_review', ['user_id' => 2, 'action' => 'consumption_restrict']);
+        $this->postJson($this->releaseEndpoint, ['id' => 2, 'reason' => '确认用户情况后解除限制'], $auth)->assertOk();
+        $this->assertTrue(InsiderGuardService::isConsumptionRestricted(2));
+        DB::table('v2_server_vmess')->insert(['id' => 1, 'name' => '节点']);
+        $this->postJson($routes[$prefix . 'nodeExclusions'], [
+            'id' => 2, 'reason' => '根据风险审查排除该节点', 'nodes' => [['node_type' => 'vmess', 'node_id' => 1]],
+        ], $auth)->assertOk();
+        $this->postJson($routes[$prefix . 'consumptionRelease'], $body, $auth)->assertOk();
+        $this->assertFalse(InsiderGuardService::isConsumptionRestricted(2));
+        $this->assertTrue(InsiderGuardService::isRestricted(2));
+        $this->assertDatabaseHas('v2_insider_guard_node_exclusion', ['user_id' => 2, 'node_type' => 'vmess', 'node_id' => 1]);
+        $this->assertDatabaseHas('v2_insider_guard_review', ['user_id' => 2, 'action' => 'consumption_release']);
+        $this->postJson($routes[$prefix . 'consumptionRelease'], $body, $auth)->assertStatus(422);
+    }
+
+    public function test_consumption_restriction_and_review_are_atomic(): void
+    {
+        DB::unprepared("CREATE TRIGGER reject_review BEFORE INSERT ON v2_insider_guard_review BEGIN SELECT RAISE(ABORT, 'failed'); END");
+        foreach ($this->app['router']->getRoutes() as $route) {
+            if ($route->getActionName() === 'App\\Http\\Controllers\\V1\\Admin\\InsiderGuardController@consumptionRestrict') $endpoint = '/' . ltrim($route->uri(), '/');
+        }
+        $this->postJson($endpoint, ['id' => 2, 'reason' => '经审核需要限制该用户消费'], ['authorization' => $this->token(1)])->assertStatus(500);
+        $this->assertFalse(InsiderGuardService::isConsumptionRestricted(2));
+    }
+
+    public function test_overview_and_detail_report_both_restrictions_without_double_counting(): void
+    {
+        DB::statement('CREATE TABLE v2_insider_guard_activity (id INTEGER PRIMARY KEY, user_id INTEGER, event_type TEXT, ip_address TEXT, ua_hash TEXT, node_count INTEGER, times INTEGER, first_at INTEGER, last_at INTEGER)');
+        DB::statement('CREATE TABLE v2_insider_guard_ua (ua_hash TEXT PRIMARY KEY, ua TEXT)');
+        DB::statement('CREATE TABLE v2_insider_guard_incident (id INTEGER PRIMARY KEY, node_type TEXT, node_id INTEGER)');
+        DB::statement('CREATE TABLE v2_insider_guard_node_user (user_id INTEGER, node_type TEXT, node_id INTEGER, times INTEGER, first_at INTEGER, last_at INTEGER)');
+        DB::table('v2_insider_guard_restrict')->insert(['user_id' => 2, 'admin_id' => 1, 'reason' => 'test', 'created_at' => 1]);
+        DB::table('v2_insider_guard_consumption_restrict')->insert(['user_id' => 2, 'admin_id' => 1, 'reason' => '消费审核原因', 'created_at' => 2]);
+        $routes = [];
+        foreach ($this->app['router']->getRoutes() as $route) $routes[$route->getActionName()] = '/' . ltrim($route->uri(), '/');
+        $prefix = 'App\\Http\\Controllers\\V1\\Admin\\InsiderGuardController@';
+        $auth = ['authorization' => $this->token(1)];
+        $this->getJson($routes[$prefix . 'overview'], $auth)->assertOk()->assertJsonPath('data.restricted', 1);
+        $this->getJson($routes[$prefix . 'userDetail'] . '?id=2', $auth)->assertOk()
+            ->assertJsonPath('data.restriction.mode', 'decoy')
+            ->assertJsonPath('data.consumption_restriction.reason', '消费审核原因');
+        $this->getJson($this->endpoint, $auth)->assertOk()->assertJsonPath('total', 2)
+            ->assertJsonPath('data.0.mode', 'consumption')->assertJsonPath('data.0.excluded_nodes', []);
     }
 }

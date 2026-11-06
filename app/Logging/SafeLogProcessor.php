@@ -13,6 +13,7 @@ class SafeLogProcessor
         'System log database write failed',
         'Subscription audit enqueue failed',
         'InsiderGuard restrict lookup unavailable',
+        'InsiderGuard consumption restriction lookup unavailable',
         'InsiderGuard audit unavailable',
         'InsiderGuard ua dictionary unavailable',
         'InsiderGuard delivery audit unavailable',

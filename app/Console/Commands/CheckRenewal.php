@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\MailService;
+use App\Services\InsiderGuardService;
 use App\Services\PlanService;
 use App\Services\OrderService;
 use Illuminate\Console\Command;
@@ -52,6 +53,15 @@ class CheckRenewal extends Command
         //$mailService = new MailService();
         foreach ($users as $user) {
             if ($user->auto_renewal && $user->plan_id !== NULL && $user->expired_at !== NULL && $user->expired_at > time() && $user->expired_at - time() < 86400 * 2) {
+                // A restriction (or an unavailable restriction check) must not
+                // disable the user's saved automatic-renewal preference.
+                try {
+                    if (InsiderGuardService::isConsumptionRestricted((int) $user->id)) {
+                        continue;
+                    }
+                } catch (\Throwable $e) {
+                    continue;
+                }
                 try {
                     $latestOrder = Order::where('user_id', $user->id)
                         ->where('period', '!=', 'reset_price')

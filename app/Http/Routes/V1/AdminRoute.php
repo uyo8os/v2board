@@ -134,6 +134,8 @@ class AdminRoute
             $router->post('/insiderGuard/restrict', 'V1\\Admin\\InsiderGuardController@restrict');
             $router->post('/insiderGuard/nodeExclusions', 'V1\\Admin\\InsiderGuardController@nodeExclusions');
             $router->post('/insiderGuard/release', 'V1\\Admin\\InsiderGuardController@release');
+            $router->post('/insiderGuard/consumptionRestrict', 'V1\\Admin\\InsiderGuardController@consumptionRestrict');
+            $router->post('/insiderGuard/consumptionRelease', 'V1\\Admin\\InsiderGuardController@consumptionRelease');
             $router->post('/insiderGuard/nodeIncident', 'V1\\Admin\\InsiderGuardController@nodeIncident');
             $router->get ('/insiderGuard/candidates', 'V1\\Admin\\InsiderGuardController@candidates');
             $router->get ('/insiderGuard/timeline', 'V1\\Admin\\InsiderGuardController@timeline');
