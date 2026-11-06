@@ -122,7 +122,9 @@ class UserController extends Controller
             $res[$i]['alive_ip'] = $countalive;
             $res[$i]['ips'] = implode(', ', $ips);
             $res[$i]['subscribe_url'] = Helper::getSubscribeUrl($res[$i]['token']);
-            $res[$i]['reset_day'] = $userService->getResetDay($res[$i]);
+            $resetInfo = $userService->getResetInfo($res[$i]);
+            $res[$i]['reset_at'] = $resetInfo['reset_at'];
+            $res[$i]['reset_day'] = $resetInfo['reset_day'];
         }
         return response([
             'data' => $res,

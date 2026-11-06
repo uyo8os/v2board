@@ -19,9 +19,17 @@ class UserService
 
     public function getResetDay(User $user, ?int $now = null): ?int
     {
+        return $this->getResetInfo($user, $now)['reset_day'];
+    }
+
+    public function getResetInfo(User $user, ?int $now = null): array
+    {
         $now ??= time();
         $resetAt = $this->getResetAt($user, $now);
-        return $resetAt === null ? null : max(0, (int) ceil(($resetAt - $now) / 86400));
+        return [
+            'reset_at' => $resetAt,
+            'reset_day' => $resetAt === null ? null : max(0, (int) ceil(($resetAt - $now) / 86400)),
+        ];
     }
 
     public function getResetPeriod(User $user): ?int

@@ -264,6 +264,42 @@ class TrafficResetTest extends TestCase
         $this->assertSame(1, (new UserService())->getResetDay($user, $this->at('2026-11-30 12:00:00')));
     }
 
+    public function test_reset_info_keeps_timestamp_and_countdown_consistent_for_due_and_missing_schedules(): void
+    {
+        $due = $this->at('2026-11-05');
+        $user = $this->account('2027-02-06', [
+            'traffic_reset_anchor_at' => $due, 'traffic_reset_at' => $due,
+            'traffic_reset_plan_id' => 1, 'traffic_reset_method' => 1,
+        ]);
+        $service = new UserService();
+        $this->assertSame(['reset_at' => $due, 'reset_day' => 0], $service->getResetInfo($user, $due + 60));
+        $this->assertSame(['reset_at' => $due, 'reset_day' => 1], $service->getResetInfo($user, $due - 1));
+        DB::table('v2_plan')->where('id', 1)->update(['reset_traffic_method' => 2]);
+        $this->assertSame(['reset_at' => null, 'reset_day' => null], $service->getResetInfo($user->fresh(), $due));
+    }
+
+    public function test_admin_user_list_returns_reset_timestamp_and_countdown(): void
+    {
+        $due = time() - 60;
+        $this->account(date('Y-m-d 00:00:00', strtotime('+1 year')), [
+            'traffic_reset_anchor_at' => $due, 'traffic_reset_at' => $due,
+            'traffic_reset_plan_id' => 1, 'traffic_reset_method' => 1,
+        ]);
+        foreach (['vmess', 'vless', 'trojan', 'shadowsocks', 'hysteria', 'tuic', 'anytls', 'v2node'] as $type) {
+            DB::statement("CREATE TABLE v2_server_{$type} (id INTEGER PRIMARY KEY, name TEXT)");
+        }
+        $request = \App\Http\Requests\Admin\UserFetch::create('/', 'GET', ['sort' => 'id']);
+        $response = (new \App\Http\Controllers\V1\Admin\UserController())->fetch($request);
+        $data = json_decode($response->getContent(), true);
+        $this->assertSame($due, $data['data'][0]['reset_at']);
+        $this->assertSame(0, $data['data'][0]['reset_day']);
+        DB::table('v2_plan')->where('id', 1)->update(['reset_traffic_method' => 2]);
+        $response = (new \App\Http\Controllers\V1\Admin\UserController())->fetch($request);
+        $data = json_decode($response->getContent(), true);
+        $this->assertNull($data['data'][0]['reset_at']);
+        $this->assertNull($data['data'][0]['reset_day']);
+    }
+
     public function test_personal_command_processes_at_most_one_hundred_due_accounts(): void
     {
         $now = time();
@@ -286,7 +322,14 @@ class TrafficResetTest extends TestCase
         $user = $this->account(date('Y-m-d 00:00:00', strtotime('+2 months')));
         $this->postJson('/api/v1/user/newPeriod', ['user' => ['id' => 1]])->assertOk()->assertExactJson(['data' => true]);
         $response = $this->getJson('/api/v1/user/getSubscribe?user[id]=1')->assertOk();
+        $info = (new UserService())->getResetInfo($user->fresh());
+        $response->assertJsonPath('data.reset_at', $info['reset_at'])
+            ->assertJsonPath('data.reset_day', $info['reset_day']);
         foreach (TrafficResetService::FIELDS as $field) $response->assertJsonMissingPath('data.' . $field);
         $this->assertNotNull($user->fresh()->traffic_reset_anchor_at);
+        DB::table('v2_plan')->where('id', 1)->update(['reset_traffic_method' => 2]);
+        $response = $this->getJson('/api/v1/user/getSubscribe?user[id]=1')->assertOk()
+            ->assertJsonPath('data.reset_at', null)->assertJsonPath('data.reset_day', null);
+        foreach (TrafficResetService::FIELDS as $field) $response->assertJsonMissingPath('data.' . $field);
     }
 }

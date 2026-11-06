@@ -304,7 +304,9 @@ class UserController extends Controller
         $user['subscribe_url_backup'] = Helper::getBackupSubscribeUrl($user['token']);
 
         $userService = new UserService();
-        $user['reset_day'] = $userService->getResetDay($user);
+        $resetInfo = $userService->getResetInfo($user);
+        $user['reset_at'] = $resetInfo['reset_at'];
+        $user['reset_day'] = $resetInfo['reset_day'];
         $user['allow_new_period'] = config('v2board.allow_new_period', 0);
         return response([
             'data' => $user
