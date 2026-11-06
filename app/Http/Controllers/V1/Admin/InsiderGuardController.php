@@ -195,6 +195,24 @@ class InsiderGuardController extends Controller
         ]);
     }
 
+    /** 当前限制记录：无过期时间，与概览统计同口径，包括尚未清理的已删除用户。 */
+    public function restrictions(Request $request)
+    {
+        $current = $this->positiveInt($request->input('current', 1));
+        $pageSize = $this->positiveInt($request->input('pageSize', 20));
+        if ($current === null || $pageSize === null) abort(422, '分页参数无效');
+        $pageSize = max(10, min(100, $pageSize));
+        $query = DB::table('v2_insider_guard_restrict');
+        $total = (clone $query)->count();
+        $rows = $query->orderByDesc('created_at')->orderByDesc('user_id')
+            ->forPage($current, $pageSize)->get(['user_id', 'admin_id', 'reason', 'created_at']);
+        return response([
+            'data' => $this->withEmails($rows),
+            'total' => $total,
+        ])->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+            ->header('Pragma', 'no-cache');
+    }
+
     /** 人工审核记录：不改变账号状态 */
     public function review(Request $request)
     {

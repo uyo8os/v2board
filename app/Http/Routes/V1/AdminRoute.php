@@ -129,6 +129,7 @@ class AdminRoute
             $router->get ('/insiderGuard/users', 'V1\\Admin\\InsiderGuardController@users');
             $router->get ('/insiderGuard/events', 'V1\\Admin\\InsiderGuardController@events');
             $router->get ('/insiderGuard/userDetail', 'V1\\Admin\\InsiderGuardController@userDetail');
+            $router->get ('/insiderGuard/restrictions', 'V1\\Admin\\InsiderGuardController@restrictions');
             $router->post('/insiderGuard/review', 'V1\\Admin\\InsiderGuardController@review');
             $router->post('/insiderGuard/restrict', 'V1\\Admin\\InsiderGuardController@restrict');
             $router->post('/insiderGuard/release', 'V1\\Admin\\InsiderGuardController@release');
