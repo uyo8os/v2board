@@ -23,8 +23,7 @@ class AppController extends Controller
         $available = $userService->isAvailable($user);
         if ($available) {
             $serverService = new ServerService();
-            $servers = $serverService->getAvailableServers($user);
-            $decoy = InsiderGuardService::isRestricted((int)$user->id);
+            $servers = $serverService->getAvailableServers($user, $decoy);
             $request->attributes->set('subscription_audit_decoy', $decoy);
             if ($decoy) InsiderGuardService::applyDecoy($servers, (int)$user->id);
         }

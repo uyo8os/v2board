@@ -205,7 +205,9 @@ class InsiderGuardController extends Controller
         $query = DB::table('v2_insider_guard_restrict');
         $total = (clone $query)->count();
         $rows = $query->orderByDesc('created_at')->orderByDesc('user_id')
-            ->forPage($current, $pageSize)->get(['user_id', 'admin_id', 'reason', 'created_at']);
+            ->forPage($current, $pageSize)->get(['user_id', 'admin_id', 'reason', 'created_at', 'mode']);
+        $exclusions = $this->excludedNodes($rows->pluck('user_id')->all());
+        foreach ($rows as $row) $row->excluded_nodes = $exclusions[$row->user_id] ?? [];
         return response([
             'data' => $this->withEmails($rows),
             'total' => $total,
@@ -239,6 +241,7 @@ class InsiderGuardController extends Controller
         if (!$user) abort(500, '用户不存在');
         if ($user->is_admin) abort(422, '不能限制管理员账号');
         DB::transaction(function () use ($id, $adminId, $reason) {
+            // 先写主键行，串行化对同一账号的变更。
             InsiderGuardService::restrict($id, $adminId, $reason);
             $this->logReview($id, $adminId, 'restrict', $reason);
         });
@@ -247,16 +250,54 @@ class InsiderGuardController extends Controller
         ]);
     }
 
+    /** 原子替换为节点排除限制。节点列表上限 100，原因和节点快照一起写入审核记录。 */
+    public function nodeExclusions(Request $request)
+    {
+        $id = $this->userId($request);
+        $reason = $this->reason($request, 8, '限制原因需 8～1000 字');
+        $raw = $request->input('nodes');
+        $nodes = is_string($raw) ? json_decode($raw, true) : $raw;
+        if (!is_array($nodes) || !array_is_list($nodes) || count($nodes) < 1 || count($nodes) > 100) abort(422, '请选择 1～100 个节点');
+        $normalized = [];
+        foreach ($nodes as $node) {
+            if (!is_array($node)) abort(422, '节点无效');
+            $type = $node['node_type'] ?? null;
+            $nodeId = $this->positiveInt($node['node_id'] ?? null);
+            if (!is_string($type) || !in_array($type, self::NODE_TYPES, true) || $nodeId === null) abort(422, '节点类型或 ID 无效');
+            $normalized[$type . ':' . $nodeId] = ['node_type' => $type, 'node_id' => $nodeId];
+        }
+        $byType = [];
+        foreach ($normalized as $node) $byType[$node['node_type']][] = $node['node_id'];
+        foreach ($byType as $type => $ids) {
+            $model = InsiderGuardService::NODE_MODELS[$type];
+            if ($model::whereIn('id', $ids)->count() !== count($ids)) abort(422, '节点不存在');
+        }
+        $adminId = (int)$request->user['id'];
+        $user = User::find($id);
+        if (!$user) abort(500, '用户不存在');
+        if ($id === $adminId || $user->is_admin) abort(422, '不能限制管理员账号');
+        DB::transaction(function () use ($id, $adminId, $reason, $normalized) {
+            DB::table('v2_insider_guard_restrict')->upsert(
+                [['user_id' => $id, 'admin_id' => $adminId, 'reason' => $reason, 'created_at' => time(), 'mode' => 'exclude']],
+                ['user_id'], ['admin_id', 'reason', 'mode']
+            );
+            DB::table('v2_insider_guard_node_exclusion')->where('user_id', $id)->delete();
+            $rows = array_map(static fn ($node) => ['user_id' => $id] + $node, array_values($normalized));
+            DB::table('v2_insider_guard_node_exclusion')->insert($rows);
+            $this->logReview($id, $adminId, 'node_exclude', $reason . "\n排除节点: " . implode(', ', array_keys($normalized)));
+        });
+        return response(['data' => true]);
+    }
+
     /** 解除限制：恢复真实入口，并留下审核记录 */
     public function release(Request $request)
     {
         $id = $this->userId($request);
         $reason = $this->reason($request, 8, '解除原因需 8～1000 字');
         if (!User::find($id)) abort(500, '用户不存在');
-        if (!DB::table('v2_insider_guard_restrict')->where('user_id', $id)->exists()) abort(422, '该用户未被限制');
         $adminId = (int)$request->user['id'];
         DB::transaction(function () use ($id, $adminId, $reason) {
-            InsiderGuardService::release($id);
+            if (!InsiderGuardService::release($id)) abort(422, '该用户未被限制');
             $this->logReview($id, $adminId, 'release', $reason);
         });
         return response([
@@ -402,9 +443,27 @@ class InsiderGuardController extends Controller
     /** 当前的限制记录（含该用户拿到的假入口地址），未限制为 null */
     private function restriction(int $userId)
     {
-        $row = DB::table('v2_insider_guard_restrict')->where('user_id', $userId)->first(['admin_id', 'reason', 'created_at']);
-        if ($row) $row->decoy_host = InsiderGuardService::decoyHost($userId);
+        $row = DB::table('v2_insider_guard_restrict')->where('user_id', $userId)->first(['admin_id', 'reason', 'created_at', 'mode']);
+        if ($row) {
+            $row->decoy_host = $row->mode === 'decoy' ? InsiderGuardService::decoyHost($userId) : null;
+            $row->excluded_nodes = $this->excludedNodes([$userId])[$userId] ?? [];
+        }
         return $row;
+    }
+
+    private function excludedNodes(array $userIds): array
+    {
+        if (!$userIds) return [];
+        $rows = DB::table('v2_insider_guard_node_exclusion')->whereIn('user_id', $userIds)
+            ->orderBy('node_type')->orderBy('node_id')->get(['user_id', 'node_type', 'node_id']);
+        if ($rows->isEmpty()) return [];
+        $names = InsiderGuardService::nodeNames();
+        $result = [];
+        foreach ($rows as $row) {
+            $result[$row->user_id][] = ['node_type' => $row->node_type, 'node_id' => (int)$row->node_id,
+                'node_name' => $names[$row->node_type . ':' . $row->node_id] ?? null];
+        }
+        return $result;
     }
 
     /** 活动记录联 UA 字典，最近活动在前 */

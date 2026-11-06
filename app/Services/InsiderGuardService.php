@@ -30,7 +30,7 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
  *   - 节点的首次 / 最近下发范围与去重计数不是完整历史，只能作为异常排查线索
  *   - 清理任务每小时按最近活动时间清理活动 / 节点范围，UA 字典多留一天；审核 / 异常登记不自动清理
  *
- * 限制：被限制的用户账号、凭据、节点列表都不动，只是拉订阅时所有节点的入口地址换成假地址，让泄露出去的订阅拿不到真实入口；
+ * 限制分为假入口与节点排除两种互斥模式：前者将订阅节点入口换成假地址，后者不向该用户下发所选节点；
  * 假地址在风控设置里配置，留空则按用户生成一个固定的、看起来像公网的 IPv4（240～254 开头的 IANA 保留段，全网不可路由，
  * 不会把流量打到别人的服务器上）；解除后恢复。
  */
@@ -63,7 +63,7 @@ class InsiderGuardService
     const DECOY_FIELDS = ['host', 'server', 'address', 'server_name', 'servername', 'sni', 'obfs-host', 'obfs_host'];
     // 日志限频：同一类错误 5 分钟一条
     const LOG_THROTTLE_SECONDS = 300;
-    // 节点类型 => 模型，只用来查名称
+    // 节点类型 => 模型，用于查名称和校验节点
     const NODE_MODELS = [
         'shadowsocks' => ServerShadowsocks::class,
         'vmess' => ServerVmess::class,
@@ -111,15 +111,45 @@ class InsiderGuardService
     public static function restrict(int $userId, int $adminId, string $reason): void
     {
         DB::table('v2_insider_guard_restrict')->upsert(
-            [['user_id' => $userId, 'admin_id' => $adminId, 'reason' => $reason, 'created_at' => time()]],
+            [['user_id' => $userId, 'admin_id' => $adminId, 'reason' => $reason, 'created_at' => time(), 'mode' => 'decoy']],
             ['user_id'],
-            ['admin_id', 'reason']
+            ['admin_id', 'reason', 'mode']
         );
+        DB::table('v2_insider_guard_node_exclusion')->where('user_id', $userId)->delete();
     }
 
-    public static function release(int $userId): void
+    public static function release(int $userId): bool
     {
-        DB::table('v2_insider_guard_restrict')->where('user_id', $userId)->delete();
+        $deleted = DB::table('v2_insider_guard_restrict')->where('user_id', $userId)->delete();
+        if (!$deleted) return false;
+        DB::table('v2_insider_guard_node_exclusion')->where('user_id', $userId)->delete();
+        return true;
+    }
+
+    /** 一条 SQL 读取限制模式和节点快照，查询异常时不下发节点。 */
+    public static function filterExcludedNodes(array $servers, int $userId, ?bool &$decoy = null): array
+    {
+        try {
+            $rows = DB::table('v2_insider_guard_restrict as r')
+                ->leftJoin('v2_insider_guard_node_exclusion as e', 'e.user_id', '=', 'r.user_id')
+                ->where('r.user_id', $userId)->get(['r.mode', 'e.node_type', 'e.node_id']);
+            $decoy = false;
+            if ($rows->isEmpty()) return $servers;
+            $mode = $rows[0]->mode;
+            if ($mode === 'decoy') {
+                $decoy = true;
+                return $servers;
+            }
+            if ($mode !== 'exclude' || $rows[0]->node_type === null) throw new \RuntimeException('Invalid restriction state');
+            $excluded = [];
+            foreach ($rows as $row) $excluded[$row->node_type . ':' . $row->node_id] = true;
+            return array_values(array_filter($servers, static function ($server) use ($excluded) {
+                return !isset($excluded[$server['type'] . ':' . $server['id']]);
+            }));
+        } catch (\Throwable $e) {
+            self::logWriteError('InsiderGuard restriction lookup unavailable', $e);
+            throw new HttpException(503, '暂时无法确认账号的风控状态，请稍后重试');
+        }
     }
 
     /**
@@ -375,6 +405,8 @@ class InsiderGuardService
         $counts = [];
         // 用户删除时限制表没有联动，顺带清掉已不存在用户的限制记录
         $counts['v2_insider_guard_restrict'] = DB::table('v2_insider_guard_restrict')
+            ->whereNotIn('user_id', User::query()->select('id'))->delete();
+        $counts['v2_insider_guard_node_exclusion'] = DB::table('v2_insider_guard_node_exclusion')
             ->whereNotIn('user_id', User::query()->select('id'))->delete();
         foreach ($targets as $table => [$column, $before, $orderBy]) {
             // 分批删，避免一条大 DELETE 长时间持锁；带 ORDER BY 让语句级 binlog 不报 unsafe

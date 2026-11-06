@@ -26,9 +26,8 @@ class ClientController extends Controller
         $userService = new UserService();
         if ($userService->isAvailable($user)) {
             $serverService = new ServerService();
-            $servers = $serverService->getAvailableServers($user);
+            $servers = $serverService->getAvailableServers($user, $decoy);
             $request->attributes->set('subscription_audit_node_count', count($servers));
-            $decoy = InsiderGuardService::isRestricted((int)$user->id);
             $request->attributes->set('subscription_audit_decoy', $decoy);
             if ($decoy) InsiderGuardService::applyDecoy($servers, (int)$user->id);
             // 沿用可用节点集合的下发线索，在追加订阅信息节点及协议输出之前采集。

@@ -973,7 +973,16 @@ CREATE TABLE IF NOT EXISTS `v2_insider_guard_restrict` (
   `reason` text NOT NULL,
   `created_at` int(11) NOT NULL,
   PRIMARY KEY (`user_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='风控中心：被限制的用户，拉订阅时节点入口换成假地址';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='风控中心：假入口或节点排除限制';
+
+ALTER TABLE `v2_insider_guard_restrict` ADD `mode` varchar(16) NOT NULL DEFAULT 'decoy';
+
+CREATE TABLE IF NOT EXISTS `v2_insider_guard_node_exclusion` (
+  `user_id` int(11) NOT NULL,
+  `node_type` varchar(40) NOT NULL,
+  `node_id` int(11) NOT NULL,
+  PRIMARY KEY (`user_id`,`node_type`,`node_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='风控中心：用户订阅中排除的节点';
 
 CREATE TABLE IF NOT EXISTS `v2_insider_guard_incident` (
   `id` int(11) NOT NULL AUTO_INCREMENT,

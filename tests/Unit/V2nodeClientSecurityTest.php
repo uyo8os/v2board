@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Http\Controllers\V1\Client\ClientController;
+use App\Http\Controllers\V1\Client\AppController;
 use App\Http\Controllers\V1\User\ServerController;
 use App\Http\Controllers\V2\Server\ServerController as NodeController;
 use App\Http\Middleware\Client as ClientMiddleware;
@@ -62,7 +63,8 @@ class V2nodeClientSecurityTest extends TestCase
         }
         $db->statement('CREATE TABLE v2_server_v2node (id INTEGER PRIMARY KEY, name TEXT, host TEXT, port TEXT, sort INTEGER, show INTEGER, parent_id INTEGER, group_id TEXT, tls_settings TEXT, encryption_settings TEXT, protocol TEXT, tls INTEGER, encryption TEXT, flow TEXT, network TEXT, network_settings TEXT, route_id TEXT, created_at INTEGER, updated_at INTEGER)');
         // Minimal real tables used by subscription eligibility and delivery recording.
-        $db->statement('CREATE TABLE v2_insider_guard_restrict (user_id INTEGER PRIMARY KEY)');
+        $db->statement("CREATE TABLE v2_insider_guard_restrict (user_id INTEGER PRIMARY KEY, mode TEXT NOT NULL DEFAULT 'decoy')");
+        $db->statement('CREATE TABLE v2_insider_guard_node_exclusion (user_id INTEGER, node_type TEXT, node_id INTEGER, PRIMARY KEY(user_id,node_type,node_id))');
         $db->statement('CREATE TABLE v2_insider_guard_ua (ua_hash TEXT PRIMARY KEY, ua TEXT, first_seen INTEGER, last_seen INTEGER)');
         $db->statement('CREATE TABLE v2_insider_guard_activity (user_id INTEGER, event_type TEXT, hour_start INTEGER, ip_address TEXT, ua_hash TEXT, times INTEGER, node_count INTEGER, first_at INTEGER, last_at INTEGER, UNIQUE(user_id,event_type,hour_start,ip_address,ua_hash))');
         $db->statement('CREATE TABLE v2_insider_guard_node_user (user_id INTEGER, node_type TEXT, node_id INTEGER, times INTEGER, first_at INTEGER, last_at INTEGER, UNIQUE(user_id,node_type,node_id))');
@@ -197,6 +199,47 @@ class V2nodeClientSecurityTest extends TestCase
         $node = json_decode($response->getContent(), true);
         $this->assertSame($this->tls(), $node['tls_settings']);
         $this->assertSame('OFFLINE-ENCRYPTION-PRIVATE', $node['encryption_settings']['private_key']);
+    }
+
+    public function test_node_exclusion_filters_user_list_subscription_and_app_before_delivery(): void
+    {
+        $db = $this->database->getConnection();
+        $db->statement('DROP TABLE v2_server_vmess');
+        $db->statement('CREATE TABLE v2_server_vmess (id INTEGER PRIMARY KEY, sort INTEGER, name TEXT, host TEXT, port TEXT, show INTEGER, parent_id INTEGER, group_id TEXT, tls INTEGER, network TEXT, updated_at INTEGER)');
+        $db->table('v2_server_vmess')->insert([
+            ['id' => 1, 'sort' => 1, 'name' => 'Excluded', 'host' => 'excluded.example.test', 'port' => '443', 'show' => 1, 'parent_id' => 0, 'group_id' => '[1]', 'tls' => 0, 'network' => 'tcp', 'updated_at' => 1000],
+            ['id' => 2, 'sort' => 2, 'name' => 'Allowed', 'host' => 'allowed.example.test', 'port' => '443', 'show' => 1, 'parent_id' => 0, 'group_id' => '[1]', 'tls' => 0, 'network' => 'tcp', 'updated_at' => 1000],
+        ]);
+        $db->table('v2_insider_guard_restrict')->insert(['user_id' => 7, 'mode' => 'exclude']);
+        $db->table('v2_insider_guard_node_exclusion')->insert(['user_id' => 7, 'node_type' => 'vmess', 'node_id' => 1]);
+        $this->app->instance('files', new \Illuminate\Filesystem\Filesystem());
+        $this->assertDeliveredHosts(['allowed.example.test']);
+        $this->assertSame([2], $db->table('v2_insider_guard_node_user')->pluck('node_id')->all());
+        $db->table('v2_insider_guard_node_exclusion')->where('user_id', 7)->update(['node_id' => 2]);
+        $this->assertDeliveredHosts(['excluded.example.test']);
+        $db->table('v2_insider_guard_node_exclusion')->where('user_id', 7)->delete();
+        $db->table('v2_insider_guard_restrict')->where('user_id', 7)->delete();
+        $this->assertDeliveredHosts(['excluded.example.test', 'allowed.example.test']);
+    }
+
+    private function assertDeliveredHosts(array $expected): void
+    {
+        $nodes = json_decode($this->fetch()->getContent(), true)['data'];
+        $this->assertSame($expected, array_column($nodes, 'host'));
+        $decoded = base64_decode($this->subscribe('general'), true);
+        $this->assertIsString($decoded);
+        $lines = array_filter(explode("\n", trim($decoded)));
+        $hosts = [];
+        foreach ($lines as $line) {
+            $this->assertStringStartsWith('vmess://', $line);
+            $node = json_decode(base64_decode(substr(trim($line), strlen('vmess://')), true), true);
+            $hosts[] = $node['add'];
+        }
+        $this->assertSame($expected, $hosts);
+        $request = Request::create('/api/v1/client/app/getConfig', 'GET', ['token' => 'offline-subscription-token']);
+        $response = (new ClientMiddleware())->handle($request, static fn ($request) => (new AppController())->getConfig($request));
+        $app = \Symfony\Component\Yaml\Yaml::parse($response->getContent());
+        $this->assertSame($expected, array_column($app['proxies'], 'server'));
     }
 
     private function fetch(): Response

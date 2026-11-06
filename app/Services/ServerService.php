@@ -222,7 +222,7 @@ class ServerService
         return $servers;
     }
 
-    public function getAvailableServers(User $user)
+    public function getAvailableServers(User $user, ?bool &$decoy = null)
     {
         $servers = array_merge(
             $this->getAvailableShadowsocks($user),
@@ -234,6 +234,7 @@ class ServerService
             $this->getAvailableAnyTLS($user),
             $this->getAvailableV2node($user)
         );
+        $servers = InsiderGuardService::filterExcludedNodes($servers, (int)$user->id, $decoy);
         $tmp = array_column($servers, 'sort');
         array_multisort($tmp, SORT_ASC, $servers);
         return array_map(function ($server) {
