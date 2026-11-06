@@ -24,6 +24,7 @@ class OrderService
     ];
     public $order;
     public $user;
+    private ?array $renewalScheduleUpdate = null;
 
     public function __construct(Order $order)
     {
@@ -32,6 +33,7 @@ class OrderService
 
     public function open()
     {
+        $this->renewalScheduleUpdate = null;
         $order = $this->order;
         $this->user = User::find($order->user_id);
         if ($order->type == 9) {
@@ -101,6 +103,21 @@ class OrderService
         if (!$this->user->save()) {
             DB::rollBack();
             abort(500, '开通失败');
+        }
+        if ($this->renewalScheduleUpdate !== null && !$clearResetSchedule) {
+            try {
+                $query = DB::table($this->user->getTable())->where('id', $this->user->id)
+                    ->where('plan_id', $this->user->plan_id)->where('expired_at', $this->user->expired_at);
+                foreach (TrafficResetService::FIELDS as $field) {
+                    $query->where($field, $this->renewalScheduleUpdate['snapshot'][$field]);
+                }
+                if ($query->update(['traffic_reset_at' => $this->renewalScheduleUpdate['next']]) !== 1) {
+                    throw new \RuntimeException('Traffic reset schedule changed during renewal; retry the order.');
+                }
+            } catch (\Throwable $exception) {
+                DB::rollBack();
+                throw $exception;
+            }
         }
         if ($clearResetSchedule) {
             try {
@@ -554,6 +571,14 @@ class OrderService
         $currentMonth = date('m');
         if ($order->type === 2 && $expireMonth == $currentMonth && $expireDay === $today ) {
             $this->buyByResetTraffic();
+            // The renewal already reset this day's traffic; consume a matching personal boundary.
+            $endOfDay = strtotime('tomorrow') - 1;
+            $next = (new TrafficResetService())->nextPersonalBoundaryAfterRenewal($this->user, $endOfDay);
+            if ($next !== null) {
+                $snapshot = [];
+                foreach (TrafficResetService::FIELDS as $field) $snapshot[$field] = $this->user->getRawOriginal($field);
+                $this->renewalScheduleUpdate = ['snapshot' => $snapshot, 'next' => $next];
+            }
         }
 
         $this->user->plan_id = $plan->id;

@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\Order;
+use App\Models\User;
 use App\Services\OrderService;
+use App\Services\TrafficResetCalendar;
 use App\Services\TrafficResetService;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -137,6 +139,119 @@ class OrderTrafficScheduleTest extends TestCase
         $this->assertSame(strtotime('+1 month', $expiry), (int) $user->expired_at);
         $this->assertSame(50, (int) $user->u);
         $this->assertSame(20, (int) $user->d);
+    }
+
+    private function checkSameDayRenewalConsumesBoundary(int $due): void
+    {
+        $endOfDay = strtotime('tomorrow') - 1;
+        if ($endOfDay <= time()) $this->markTestSkipped('No remaining time today.');
+        $this->prepareOrder(2, 'month_price', 1, $endOfDay);
+        $anchor = $due + 600;
+        DB::table('v2_user')->where('id', 1)->update([
+            'traffic_reset_anchor_at' => $anchor, 'traffic_reset_offset' => 600,
+            'traffic_reset_at' => $due, 'traffic_reset_plan_id' => 1, 'traffic_reset_method' => 1,
+        ]);
+        $oldSnapshot = User::findOrFail(1);
+        $this->activate();
+        $saved = User::findOrFail(1);
+        $expected = (new TrafficResetCalendar(config('app.timezone')))->nextBoundary(1, $anchor, $endOfDay, 600);
+        $this->assertSame($expected, (int) $saved->traffic_reset_at);
+        $this->assertSame($anchor, (int) $saved->traffic_reset_anchor_at);
+        $this->assertSame(600, (int) $saved->traffic_reset_offset);
+        $this->assertSame(0, (int) $saved->u + (int) $saved->d);
+        DB::table('v2_user')->where('id', 1)->update(['u' => 17, 'd' => 8]);
+        $resets = new TrafficResetService();
+        $this->assertFalse($resets->resetPersonal($oldSnapshot, max(time(), $due)));
+        $this->assertFalse($resets->resetPersonal(User::findOrFail(1), max(time(), $due)));
+        $this->assertSame(25, (int) User::findOrFail(1)->u + (int) User::findOrFail(1)->d);
+        DB::table('v2_user')->where('id', 1)->update(['expired_at' => $expected + 60 * 86400]);
+        $this->assertTrue($resets->resetPersonal(User::findOrFail(1), $expected));
+        $this->assertSame(0, (int) User::findOrFail(1)->u + (int) User::findOrFail(1)->d);
+    }
+
+    public function test_same_day_renewal_consumes_personal_boundary_later_today(): void
+    {
+        if (time() + 2 >= strtotime('tomorrow')) $this->markTestSkipped('No later boundary today.');
+        $this->checkSameDayRenewalConsumesBoundary(time() + 1);
+    }
+
+    public function test_same_day_renewal_consumes_already_due_personal_boundary(): void
+    {
+        $this->checkSameDayRenewalConsumesBoundary(time() - 1);
+    }
+
+    public function test_same_day_renewal_keeps_personal_boundary_on_a_later_day(): void
+    {
+        $endOfDay = strtotime('tomorrow') - 1;
+        if ($endOfDay <= time()) $this->markTestSkipped('No remaining time today.');
+        $this->prepareOrder(2, 'month_price', 1, $endOfDay);
+        $due = strtotime('tomorrow') + 3600;
+        $schedule = ['traffic_reset_anchor_at' => $due + 600, 'traffic_reset_offset' => 600,
+            'traffic_reset_at' => $due, 'traffic_reset_plan_id' => 1, 'traffic_reset_method' => 1];
+        DB::table('v2_user')->where('id', 1)->update($schedule);
+        $this->activate();
+        $this->assertSchedule($schedule);
+        $this->assertSame(0, (int) User::findOrFail(1)->u + (int) User::findOrFail(1)->d);
+    }
+
+    public function test_failed_same_day_renewal_rolls_back_the_schedule_and_traffic(): void
+    {
+        $endOfDay = strtotime('tomorrow') - 1;
+        if ($endOfDay <= time()) $this->markTestSkipped('No remaining time today.');
+        $this->prepareOrder(2, 'month_price', 1, $endOfDay, 0);
+        $due = time() - 1;
+        $schedule = ['traffic_reset_anchor_at' => $due + 600, 'traffic_reset_offset' => 600,
+            'traffic_reset_at' => $due, 'traffic_reset_plan_id' => 1, 'traffic_reset_method' => 1];
+        DB::table('v2_user')->where('id', 1)->update($schedule);
+        $this->activate();
+        $this->assertSchedule($schedule);
+        $saved = User::findOrFail(1);
+        $this->assertSame($endOfDay, (int) $saved->expired_at);
+        $this->assertSame(70, (int) $saved->u + (int) $saved->d);
+    }
+
+    public function test_same_day_renewal_does_not_overwrite_a_changed_schedule_snapshot(): void
+    {
+        $endOfDay = strtotime('tomorrow') - 1;
+        if ($endOfDay <= time()) $this->markTestSkipped('No remaining time today.');
+        $this->prepareOrder(2, 'month_price', 1, $endOfDay);
+        $due = time() - 1;
+        DB::table('v2_user')->where('id', 1)->update([
+            'traffic_reset_anchor_at' => $due + 600, 'traffic_reset_offset' => 600,
+            'traffic_reset_at' => $due, 'traffic_reset_plan_id' => 1, 'traffic_reset_method' => 1,
+        ]);
+        // Simulate a different schedule being committed before the conditional schedule update.
+        DB::statement('CREATE TRIGGER mutate_schedule AFTER UPDATE OF expired_at ON v2_user
+            BEGIN UPDATE v2_user SET traffic_reset_at = traffic_reset_at + 1 WHERE id = NEW.id; END');
+        try {
+            $this->activate();
+            $this->fail('An altered schedule must abort the renewal.');
+        } catch (\RuntimeException $exception) {
+            $this->assertStringContainsString('schedule changed', $exception->getMessage());
+        }
+        $this->assertSame($due, (int) User::findOrFail(1)->traffic_reset_at);
+        $this->assertSame($endOfDay, (int) User::findOrFail(1)->expired_at);
+        $this->assertSame(70, (int) User::findOrFail(1)->u + (int) User::findOrFail(1)->d);
+        $this->assertSame(1, (int) DB::table('v2_order')->where('id', 1)->value('status'));
+        $this->assertSame(0, DB::transactionLevel());
+    }
+
+    public function test_reusing_order_service_does_not_reapply_previous_schedule_update(): void
+    {
+        $endOfDay = strtotime('tomorrow') - 1;
+        if ($endOfDay <= time()) $this->markTestSkipped('No remaining time today.');
+        $this->prepareOrder(2, 'month_price', 1, $endOfDay);
+        $due = time() - 1;
+        $schedule = ['traffic_reset_anchor_at' => $due + 600, 'traffic_reset_offset' => 600,
+            'traffic_reset_at' => $due, 'traffic_reset_plan_id' => 1, 'traffic_reset_method' => 1];
+        DB::table('v2_user')->where('id', 1)->update($schedule);
+        $service = new OrderService(Order::findOrFail(1));
+        $service->open();
+        DB::table('v2_order')->where('id', 1)->update(['status' => 1]);
+        DB::table('v2_user')->where('id', 1)->update($schedule + ['expired_at' => time() + 2 * 86400]);
+        $service->open();
+        $this->assertSchedule($schedule);
+        $this->assertSame(3, (int) DB::table('v2_order')->where('id', 1)->value('status'));
     }
 
     public function test_expired_renewal_order_clears_stale_schedule(): void

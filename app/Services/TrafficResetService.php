@@ -65,6 +65,22 @@ class TrafficResetService
             && (int) $user->traffic_reset_method === $method;
     }
 
+    /** A same-day renewal reset consumes any personal boundary due by the end of that day. */
+    public function nextPersonalBoundaryAfterRenewal(User $user, int $endOfDay): ?int
+    {
+        $method = $this->method($user);
+        if ($method === null || $method === 2 || !$this->hasPersonalSchedule($user, $method)
+            || $user->traffic_reset_at === null || (int) $user->traffic_reset_at > $endOfDay) return null;
+        try {
+            $this->validatePersonal($user);
+            return $this->calendar->nextBoundary($method, (int) $user->traffic_reset_anchor_at,
+                $endOfDay, (int) $user->traffic_reset_offset);
+        } catch (InvalidArgumentException | RuntimeException $exception) {
+            // Existing invalid schedules must not prevent an otherwise valid order.
+            return null;
+        }
+    }
+
     public function nextResetAt(User $user, ?int $now = null): ?int
     {
         $now ??= time();
