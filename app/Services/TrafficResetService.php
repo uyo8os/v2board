@@ -20,6 +20,10 @@ class TrafficResetService
         'traffic_reset_anchor_at', 'traffic_reset_offset', 'traffic_reset_at',
         'traffic_reset_plan_id', 'traffic_reset_method',
     ];
+    public const EMPTY_SCHEDULE = [
+        'traffic_reset_anchor_at' => null, 'traffic_reset_offset' => 0, 'traffic_reset_at' => null,
+        'traffic_reset_plan_id' => null, 'traffic_reset_method' => null,
+    ];
     public const SNAPSHOT_FIELDS = ['id', 'plan_id', 'expired_at', 'u', 'd', 'transfer_enable', ...self::FIELDS];
 
     private TrafficResetCalendar $calendar;
@@ -189,8 +193,7 @@ class TrafficResetService
 
     private function emptySchedule(): array
     {
-        return ['traffic_reset_anchor_at' => null, 'traffic_reset_offset' => 0, 'traffic_reset_at' => null,
-            'traffic_reset_plan_id' => null, 'traffic_reset_method' => null];
+        return self::EMPTY_SCHEDULE;
     }
 
     /** Short writes only: no explicit row lock, retry, sleep or external work. */

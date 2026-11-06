@@ -55,6 +55,13 @@ class OrderService
         if ($order->refund_amount) {
             $this->user->balance = $this->user->balance + $order->refund_amount;
         }
+        // A new subscription must not reuse an earlier personal reset calendar.
+        // An active renewal of the same plan and a reset package keep it.
+        $clearResetSchedule = $order->period !== 'reset_price' && (
+            $order->period === 'onetime_price' || (int) $order->type !== 2
+            || $this->user->expired_at === null || (int) $this->user->expired_at <= time()
+            || (int) $this->user->plan_id !== (int) $order->plan_id
+        );
         DB::beginTransaction();
         if ($order->surplus_order_ids) {
             try {
@@ -94,6 +101,15 @@ class OrderService
         if (!$this->user->save()) {
             DB::rollBack();
             abort(500, '开通失败');
+        }
+        if ($clearResetSchedule) {
+            try {
+                DB::table($this->user->getTable())->where('id', $this->user->id)
+                    ->update(TrafficResetService::EMPTY_SCHEDULE);
+            } catch (\Throwable $exception) {
+                DB::rollBack();
+                throw $exception;
+            }
         }
         if (!Order::where('id', $order->id)->where('status', 1)->update(['status' => 3])) {
             DB::rollBack();
