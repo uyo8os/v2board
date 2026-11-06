@@ -35,6 +35,18 @@ class TrafficResetService
         $this->calendar = new TrafficResetCalendar($this->timezone->getName());
     }
 
+    /** Manual changes replace the calendar context; ordinary edits preserve it. */
+    public static function scheduleFieldsForManualUpdate(User $user, array $params): array
+    {
+        foreach (['expired_at', 'plan_id'] as $field) {
+            if (!array_key_exists($field, $params)) continue;
+            $old = $user->$field === null ? null : (int) $user->$field;
+            $new = $params[$field] === null ? null : (int) $params[$field];
+            if ($old !== $new) return self::EMPTY_SCHEDULE;
+        }
+        return [];
+    }
+
     public function method(User $user): ?int
     {
         if ($user->plan_id === null) return null;

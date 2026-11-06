@@ -15,6 +15,7 @@ use App\Models\Plan;
 use App\Models\TicketMessage;
 use App\Models\User;
 use App\Services\AuthService;
+use App\Services\TrafficResetService;
 use App\Utils\Helper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -183,6 +184,7 @@ class UserController extends Controller
         }
 
         try {
+            $user->forceFill(TrafficResetService::scheduleFieldsForManualUpdate($user, $params));
             $user->update($params);
         } catch (\Exception $e) {
             abort(500, '保存失败');
