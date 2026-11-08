@@ -78,7 +78,7 @@ class OrderController extends Controller
     public function save(OrderSave $request)
     {
         if (InsiderGuardService::isConsumptionRestricted((int) $request->user['id'])) {
-            abort(422, '当前账号已限制消费');
+            abort(422, '暂时无法处理');
         }
         $userService = new UserService();
         if ($userService->isNotCompleteOrderByUserId($request->user['id'])) {
