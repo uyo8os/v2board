@@ -7,6 +7,7 @@ project=${COMPOSE_PROJECT_NAME:-v2board-fix-acceptance}
 compose() { docker compose -p "$project" -f docker/compose.test.yaml "$@"; }
 compose build test
 compose up -d mysql redis
+compose run --rm test sh /source/docker/tests/update-overwrite.sh
 compose run --rm test sh /source/docker/tests/install.sh
 compose run --rm test sh docker/tests/upgrade.sh
 compose run --rm test php docker/tests/security-auth.php

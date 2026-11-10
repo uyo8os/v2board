@@ -18,17 +18,17 @@ Workerman 可使用 `php -c cli-php.ini webman.php start`。该配置仅用于 W
 
 ## 已有站点升级
 
-升级前备份数据库、`.env`、`config/v2board.php` 及自定义主题，先确保 CLI / FPM 满足 PHP 8.4.1+ 的要求，并使用 Composer 2.11。
+升级前备份数据库、`.env`、`config/v2board.php` 及自定义主题，先确保 CLI / FPM 满足 PHP 8.4.1+ 的要求，并使用 Composer 2.11。进入维护模式，暂停网站、计划任务、Horizon 和已启用的 Workerman 后执行更新。
 
 ```sh
 git branch --show-current
 git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}'
-sh update.sh
+bash update.sh
 ```
 
-当前 `fix` 应跟踪 `origin/fix`；不要切回 `master`。脚本只允许快进合并，存在跟踪文件修改、没有 upstream、依赖失败或真实 SQL 错误都会停止。已由其他方式同步到目标代码的部署使用 `sh update.sh --local`。不删除锁文件，不在部署时执行不确定的依赖更新，不关闭安全检查。
+运行 `bash update.sh` 即获取当前分支的 upstream，并以 `git reset --hard` 覆盖服务器程序代码及本地提交。当前 `fix` 应跟踪 `origin/fix`。`.env`、`config/v2board.php` 和 `config/theme` 下的运行配置不在 Git 跟踪内，正常保留；不执行 `git clean`，但不保证阻挡远端跟踪路径的未跟踪文件仍被保留。已同步代码时使用 `bash update.sh --local` 跳过全部 Git 操作。没有 upstream、依赖失败或真实 SQL 错误仍会停止；依赖继续按锁文件安装并执行平台、安全检查。
 
-升级保留 `APP_KEY`、原认证逻辑及 Redis 前缀。旧 Laravel 的配置 / 包发现缓存会在加载新依赖前清除；SQL 导入支持注释、引号、存储过程及 `DELIMITER`，只跳过累计脚本中已应用的历史 DDL，不再吞掉全部错误。重复升级不会清空限速记录。本次未增加业务表或进行认证、数据库结构改造。
+升级保留 `APP_KEY` 和 Redis 前缀。旧 Laravel 的配置 / 包发现缓存会在加载新依赖前清除；SQL 导入支持注释、引号、存储过程及 `DELIMITER`，只跳过累计脚本中已应用的历史 DDL，不再吞掉全部错误。重复升级不会清空限速记录；当前认证修复所需的 `auth_version` 列随数据库升级补齐。
 
 成功后 Horizon 收到退出信号，由现有 Supervisor / systemd / PM2 等守护程序拉起；需重新加载 PHP-FPM 并重启 Workerman，让长驻进程加载新代码。脚本不会声称队列已经重启。生产环境也会消费订单、流量、限速、邮件等原业务队列和独立审计队列。
 

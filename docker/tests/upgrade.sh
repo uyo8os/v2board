@@ -48,12 +48,10 @@ sh update.sh --local > storage/logs/repeat-upgrade-test.log 2>&1
 php docker/tests/fixtures.php preserved
 
 echo local-change >> release-sentinel
-if sh update.sh > storage/logs/dirty-upgrade-test.log 2>&1; then
-    echo 'FAIL: Update accepted modified tracked files' >&2; exit 1
-fi
-grep -q local-change release-sentinel
-git restore release-sentinel
-echo 'PASS: Git update follows fix, preserves local work, and can be repeated'
+sh update.sh > storage/logs/dirty-upgrade-test.log 2>&1
+test "$(cat release-sentinel)" = release-2
+php docker/tests/fixtures.php preserved
+echo 'PASS: Git update follows fix, overwrites tracked local changes, and can be repeated'
 
 cp database/update.sql /tmp/v2board-acceptance-update.sql
 printf '\nTHIS IS INVALID SQL;\n' >> database/update.sql

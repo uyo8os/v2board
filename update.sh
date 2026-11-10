@@ -7,15 +7,11 @@ case "${1:-}" in
     '')
         command -v git >/dev/null 2>&1 || { echo 'Git is required.' >&2; exit 1; }
         git rev-parse --is-inside-work-tree >/dev/null
-        if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
-            echo 'Tracked files have local changes. Commit or save them before updating.' >&2
-            exit 1
-        fi
-        # Follow the current branch's upstream, including fix; never reset local work.
+        # Replace tracked program files with the configured release, including fix.
         upstream=$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}')
         remote=$(git config --get "branch.$(git branch --show-current).remote")
         git fetch "$remote"
-        git merge --ff-only "$upstream"
+        git reset --hard "$upstream"
         exec sh ./update.sh --local
         ;;
     *) echo 'Usage: sh update.sh [--local]' >&2; exit 1 ;;

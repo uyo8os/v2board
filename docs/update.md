@@ -49,20 +49,21 @@ cd /www/wwwroot/api.example.com
 bash update.sh
 ```
 
-脚本会更新当前分支所跟踪的远程分支。使用本文的 `fix` 分支部署时，应跟踪 `origin/fix`。
+运行 `bash update.sh` 即按当前分支的 upstream 覆盖服务器程序代码，包括已跟踪文件的本地修改和本地提交。本文的 `fix` 应跟踪 `origin/fix`。
+
+`.env`、`config/v2board.php` 和 `config/theme` 下的运行配置不在 Git 跟踪内，正常保留。脚本不执行 `git clean`；但未跟踪文件若阻挡远端跟踪路径，仍可能被 Git 覆盖。
 
 ### 从旧版本首次升级到 fix
 
 旧版 `update.sh` 会强制重置到 `master`，首次升级不要直接运行旧脚本。
 
-确认本次修复已经发布到本项目的 `origin/fix`，并保存好本地代码修改后，先同步新代码，再运行新的更新脚本：
+确认本次修复已经发布到本项目的 `origin/fix`，先覆盖为远端代码，再运行新的更新脚本：
 
 ```sh
 cd /www/wwwroot/api.example.com
 git remote set-url origin https://github.com/uyo8os/v2board.git
 git fetch origin
-git checkout fix
-git merge --ff-only origin/fix
+git checkout -f -B fix origin/fix
 git branch --set-upstream-to=origin/fix fix
 ```
 
@@ -96,13 +97,13 @@ php artisan horizon:status
 
 确认 Laravel 为 **13.40.0**、Horizon 显示 **running**，再执行 `php artisan up`，恢复网站和计划任务。
 
-以上命令会将 `origin` 设置为本项目仓库。任何一步报错都先停止，处理完成后再继续，不要强制覆盖自己的代码修改。
+以上命令会将 `origin` 设置为本项目仓库，并用 `origin/fix` 覆盖本地程序修改和提交。任何一步报错都先停止，处理完成后再继续。
 
 `--local` 用于代码已经同步完成的情况，只更新依赖和数据库，不再拉取代码。以后使用上一节的 `bash update.sh` 即可。
 
 ### 更新脚本会做什么
 
-- 同步代码；使用 `--local` 时跳过这一步。
+- 获取当前分支的远端更新，执行 `git reset --hard` 覆盖程序代码；使用 `--local` 时跳过全部 Git 操作。
 - 按 `composer.lock` 安装依赖，检查 PHP、扩展和依赖安全公告。
 - 自动检查历史邮箱规范化冲突；有冲突则停止，不执行后续数据库变更。
 - 执行数据库更新，并规范化历史邮箱、更新邮箱列排序规则。
@@ -215,9 +216,9 @@ php artisan horizon:status
 
 ## 常见问题
 
-**Q：提示存在本地修改，无法更新**
+**Q：更新会保留服务器上的程序修改吗？**
 
-A：在站点目录执行 `git status --short`，查看修改了哪些文件。先备份、提交或妥善保存自己的修改，再更新，不要直接强制重置。
+A：不会。`bash update.sh` 直接覆盖到当前分支的远端版本，本地修改和本地提交都会被替换，不需要先合并代码。
 
 **Q：提示没有跟踪分支**
 
