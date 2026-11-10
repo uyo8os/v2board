@@ -66,6 +66,7 @@ class AuthSessionSecurityTest extends TestCase
         $this->database->bootEloquent();
         $this->app->instance('db', $this->database->getDatabaseManager());
         $this->database->getConnection()->statement('CREATE TABLE v2_user (id INTEGER PRIMARY KEY, email TEXT UNIQUE, token TEXT, is_admin INTEGER DEFAULT 0, is_staff INTEGER DEFAULT 0, banned INTEGER DEFAULT 0, group_id INTEGER, invite_user_id INTEGER, created_at INTEGER, updated_at INTEGER)');
+        $this->database->getConnection()->statement("ALTER TABLE v2_user ADD auth_version TEXT NOT NULL DEFAULT ''");
         $responses = Mockery::mock(ResponseFactoryContract::class);
         $responses->shouldReceive('make')->andReturnUsing(static fn ($data = '', $status = 200, $headers = []) => new \Illuminate\Http\Response($data, $status, $headers));
         $this->app->instance(ResponseFactoryContract::class, $responses);
@@ -190,10 +191,8 @@ class AuthSessionSecurityTest extends TestCase
         $request = $this->updateRequest(['email' => 'changed@example.test', 'is_admin' => 0, 'is_staff' => 0]);
         $response = (new AdminMiddleware())->handle($this->authorized($jwt), static fn () => (new AdminUserController())->update($request));
         $this->assertSame(200, $response->getStatusCode());
-        $current = $this->through(UserMiddleware::class, $jwt);
-        $this->assertSame('changed@example.test', $current['email']);
-        $this->assertSame(0, $current['is_admin']);
-        $this->assertSame(0, $current['is_staff']);
+        $this->denied(UserMiddleware::class, $jwt);
+        $this->assertSame('changed@example.test', User::find(7)->email);
         $this->denied(AdminMiddleware::class, $jwt);
         $this->denied(StaffMiddleware::class, $jwt);
 

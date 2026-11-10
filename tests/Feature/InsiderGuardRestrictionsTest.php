@@ -27,6 +27,7 @@ class InsiderGuardRestrictionsTest extends TestCase
         DB::purge('sqlite');
         Cache::flush();
         DB::statement('CREATE TABLE v2_user (id INTEGER PRIMARY KEY, email TEXT, is_admin INTEGER DEFAULT 0, is_staff INTEGER DEFAULT 0, banned INTEGER DEFAULT 0)');
+        DB::statement("ALTER TABLE v2_user ADD auth_version TEXT NOT NULL DEFAULT ''");
         DB::statement("CREATE TABLE v2_insider_guard_restrict (user_id INTEGER PRIMARY KEY, admin_id INTEGER, reason TEXT, created_at INTEGER, mode TEXT NOT NULL DEFAULT 'decoy')");
         DB::statement('CREATE TABLE v2_insider_guard_consumption_restrict (user_id INTEGER PRIMARY KEY, admin_id INTEGER, reason TEXT, created_at INTEGER)');
         DB::statement('CREATE TABLE v2_insider_guard_node_exclusion (user_id INTEGER, node_type TEXT, node_id INTEGER, PRIMARY KEY(user_id,node_type,node_id))');

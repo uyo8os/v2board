@@ -32,6 +32,7 @@ class TrafficAdvanceAdminTest extends TestCase
             transfer_enable INTEGER DEFAULT 100,traffic_reset_anchor_at INTEGER DEFAULT 1796486400,
             traffic_reset_offset INTEGER DEFAULT 43201,traffic_reset_at INTEGER DEFAULT 1796443199,
             traffic_reset_plan_id INTEGER DEFAULT 9,traffic_reset_method INTEGER DEFAULT 1)');
+        DB::statement("ALTER TABLE v2_user ADD auth_version TEXT NOT NULL DEFAULT ''");
         DB::table('v2_user')->insert([
             ['id' => 1, 'email' => 'admin@example.test', 'is_admin' => 1],
             ['id' => 2, 'email' => 'user@example.test', 'is_admin' => 0],

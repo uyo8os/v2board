@@ -9,8 +9,9 @@ class User extends Model
 {
     protected $table = 'v2_user';
     protected $dateFormat = 'U';
-    protected $guarded = ['id'];
+    protected $guarded = ['id', 'auth_version'];
     protected $hidden = [
+        'auth_version',
         'traffic_reset_anchor_at', 'traffic_reset_offset', 'traffic_reset_at',
         'traffic_reset_plan_id', 'traffic_reset_method',
     ];
@@ -18,6 +19,16 @@ class User extends Model
         'created_at' => 'timestamp',
         'updated_at' => 'timestamp'
     ];
+
+    protected function performUpdate(Builder $query)
+    {
+        if ($this->isDirty(['password', 'password_algo', 'password_salt', 'banned', 'is_admin', 'is_staff'])) {
+            // Persist the revocation version in the same statement as the credential change.
+            $this->auth_version = bin2hex(random_bytes(16));
+        }
+
+        return parent::performUpdate($query);
+    }
 
     // ASCII identities only: do not fold accents or rewrite dots, plus tags or domains.
     public static function normalizeEmail(string $email): string

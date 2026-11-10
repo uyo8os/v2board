@@ -58,6 +58,7 @@ class V2nodeClientSecurityTest extends TestCase
         $this->app->instance('db', $this->database->getDatabaseManager());
         $db = $this->database->getConnection();
         $db->statement('CREATE TABLE v2_user (id INTEGER PRIMARY KEY, email TEXT, uuid TEXT, token TEXT, is_admin INTEGER DEFAULT 0, is_staff INTEGER DEFAULT 0, banned INTEGER DEFAULT 0, group_id INTEGER, transfer_enable INTEGER, expired_at INTEGER, u INTEGER DEFAULT 0, d INTEGER DEFAULT 0)');
+        $db->statement("ALTER TABLE v2_user ADD auth_version TEXT NOT NULL DEFAULT ''");
         foreach (['shadowsocks', 'vmess', 'trojan', 'tuic', 'hysteria', 'vless', 'anytls', 'v2node'] as $type) {
             if ($type !== 'v2node') $db->statement('CREATE TABLE v2_server_' . $type . ' (id INTEGER PRIMARY KEY, sort INTEGER)');
         }

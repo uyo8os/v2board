@@ -90,6 +90,7 @@ class EmailIdentitySecurityTest extends TestCase
             return strcmp($fold($left), $fold($right));
         });
         $db->statement('CREATE TABLE v2_user (id INTEGER PRIMARY KEY, email TEXT COLLATE EMAIL_CI UNIQUE, password TEXT, password_algo TEXT, password_salt TEXT, token TEXT, uuid TEXT, is_admin INTEGER DEFAULT 0, is_staff INTEGER DEFAULT 0, banned INTEGER DEFAULT 0, plan_id INTEGER, group_id INTEGER, transfer_enable INTEGER, device_limit INTEGER, expired_at INTEGER, invite_user_id INTEGER, last_login_at INTEGER, created_at INTEGER, updated_at INTEGER)');
+        $db->statement("ALTER TABLE v2_user ADD auth_version TEXT NOT NULL DEFAULT ''");
         $dispatcher = Mockery::mock(DispatcherContract::class);
         $dispatcher->shouldReceive('dispatch')->andReturnUsing(function ($job) { $this->jobs[] = $job; return null; });
         $this->app->instance(DispatcherContract::class, $dispatcher);

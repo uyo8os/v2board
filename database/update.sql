@@ -1065,3 +1065,6 @@ CREATE TABLE IF NOT EXISTS `v2_traffic_advance_log` (
 
 /* Existing installations may already have the record table without the search index. */
 ALTER TABLE `v2_traffic_advance_log` ADD INDEX `email_id` (`email`,`id`);
+
+/* Authentication capabilities issued before a credential change must remain revoked. */
+ALTER TABLE `v2_user` ADD `auth_version` char(32) NOT NULL DEFAULT '' AFTER `password_salt`;

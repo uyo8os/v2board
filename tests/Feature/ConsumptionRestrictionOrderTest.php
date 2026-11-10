@@ -28,6 +28,7 @@ class ConsumptionRestrictionOrderTest extends TestCase
         DB::purge('sqlite');
         Cache::flush();
         DB::statement('CREATE TABLE v2_user (id INTEGER PRIMARY KEY, email TEXT, is_admin INTEGER DEFAULT 0, is_staff INTEGER DEFAULT 0, banned INTEGER DEFAULT 0, plan_id INTEGER, expired_at INTEGER, auto_renewal INTEGER DEFAULT 0, balance INTEGER DEFAULT 0, discount INTEGER DEFAULT 0, invite_user_id INTEGER, created_at INTEGER, updated_at INTEGER)');
+        DB::statement("ALTER TABLE v2_user ADD auth_version TEXT NOT NULL DEFAULT ''");
         DB::statement('CREATE TABLE v2_insider_guard_consumption_restrict (user_id INTEGER PRIMARY KEY, admin_id INTEGER, reason TEXT, created_at INTEGER)');
         DB::statement('CREATE TABLE v2_plan (id INTEGER PRIMARY KEY, name TEXT, renew INTEGER, month_price INTEGER)');
         DB::statement('CREATE TABLE v2_order (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, plan_id INTEGER, period TEXT, trade_no TEXT, total_amount INTEGER DEFAULT 0, balance_amount INTEGER DEFAULT 0, discount_amount INTEGER DEFAULT 0, type INTEGER, status INTEGER DEFAULT 0, invite_user_id INTEGER, paid_at INTEGER, callback_no TEXT, payment_id INTEGER, coupon_id INTEGER, created_at INTEGER, updated_at INTEGER)');

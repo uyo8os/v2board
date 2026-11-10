@@ -1,5 +1,28 @@
 # 安装、依赖与升级验收记录
 
+## 2026-11-10：A02 凭据撤销与真实 MySQL/Redis 并发验收
+
+在独立 Compose 项目 `v2board-a02-20261110` 验证本次代码与交付锁文件。环境为 Linux、PHP **8.4.27**、Laravel **13.40.0**、PHPUnit **13.4.6**、MySQL **5.7.44**、Redis **7.4.8**、phpredis **6.3.0**。
+
+- 锁定 `composer install`、平台检查及安全审计通过。
+- 全新安装、模拟缺少 `auth_version` 的旧数据库升级、重复升级和原夹具数据保留全部通过。
+- `docker/tests/security-auth.php` 真实 MySQL/Redis 专项全部通过：五个改密入口撤销旧会话/快捷码，禁用或角色恢复后旧凭据不复活，过滤批量禁用只影响指定用户；旧会话兼容与旧整数快捷码拒绝符合预期。
+- 8 个独立 PHP 进程各自加载应用并在 Redis 屏障后同时兑换同一个快捷码：**1 次成功、7 次返回 500、恰好 1 个有效会话**，快捷码已删除。
+- 两个确定性改密交错分别停在旧密码已验证、快捷码已完成初次版本检查并删除的位置；主进程提交新密码及认证版本后，子进程恢复均返回 **403**，未保存会话。测试未添加数据库行锁，使用真实 Redis 会话锁控制暂停位置。
+- 仅清理本次成功插入的合成用户、活动记录及登记的 Redis 键，精确清理检查通过。A02 脚本已接入 `docker/tests/run.sh`。
+
+Linux 认证 A01 + A02 定向回归 **54 项测试、317 条断言通过**。Linux 完整 PHPUnit 为 **304 项测试、2181 条断言，1 项失败**。失败项为已有 `ConsumptionRestrictionOrderTest::test_new_orders_are_rejected_before_balance_or_order_changes` 文案不一致：期望“当前账号已限制消费”，控制器已有实现返回“暂时无法处理”；同样失败可在 Windows 单独复现，业务代码与原测试在修复前已不一致。首次运行的 1 项 PHPUnit 弃用提示来自命令行选项 `--do-not-cache-result`，不来自代码或测试用例。
+
+改用 `--do-not-record-test-run-history`，仅排除上述已知失败用例，并启用弃用/警告失败，复核 **303 项测试、2179 条断言通过，退出码 0、无弃用或警告**：
+
+```powershell
+docker compose -p v2board-a02-20261110 -f docker/compose.test.yaml run --rm test vendor/bin/phpunit --filter '/^(?!.*test_new_orders_are_rejected_before_balance_or_order_changes)/' --no-progress --colors=never --do-not-record-test-run-history --fail-on-deprecation --fail-on-warning
+```
+
+本次 A02 专项、新装、升级与多进程检查通过；完整 304 项套件仍有上述 1 项既有失败，不能将完整 PHPUnit 套件或整个 `run.sh` 描述为全部通过。
+
+Windows 的 A02 专项、Unit 及离线脚本结果与生产升级要求见 [A02 修复日志](../docs/changelog/2026-11-10-auth-credential-revocation-fix.md)。以上为隔离环境验证，实际生产数据库升级、服务重启和上线验收尚未执行。
+
 ## 2026-11-05：A11 与安全依赖完整复验
 
 更新四个 Symfony 组件后，在新隔离 Compose 项目 `v2board-a11-verified-20261105` 运行 `docker/tests/run.sh`，脚本退出码 **0**。测试使用 PHP **8.4.27**、Laravel **13.40.0**、MySQL **5.7.44**、Redis **7.4.8**、Nginx **1.30.6**；FPM / Workerman 端口为 19110 / 19111。完整输出保存在未跟踪的 `.docker-test/a11-verified-20261105.log`。

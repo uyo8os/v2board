@@ -1,5 +1,5 @@
 <?php
-/** Offline audit checks: A01 regression plus still-open A02 observations. Synthetic data only. */
+/** Offline A01/A02 rejection regressions. Synthetic data only. */
 if (PHP_SAPI !== 'cli') {
     http_response_code(404);
     exit;
@@ -50,6 +50,7 @@ $database->addConnection(['driver' => 'sqlite', 'database' => ':memory:', 'prefi
 $database->bootEloquent();
 $app->instance('db', $database->getDatabaseManager());
 $database->getConnection()->statement('CREATE TABLE v2_user (id INTEGER PRIMARY KEY, email TEXT UNIQUE, password TEXT, password_algo TEXT, password_salt TEXT, token TEXT, uuid TEXT, is_admin INTEGER DEFAULT 0, is_staff INTEGER DEFAULT 0, banned INTEGER DEFAULT 0, plan_id INTEGER, group_id INTEGER, invite_user_id INTEGER, last_login_at INTEGER, created_at INTEGER, updated_at INTEGER)');
+$database->getConnection()->statement("ALTER TABLE v2_user ADD auth_version TEXT NOT NULL DEFAULT ''");
 $responses = Mockery::mock(ResponseFactoryContract::class);
 $responses->shouldReceive('make')->andReturnUsing(static fn ($data = '', $status = 200, $headers = []) => new Illuminate\Http\Response($data, $status, $headers));
 $app->instance(ResponseFactoryContract::class, $responses);
@@ -109,7 +110,7 @@ AuthService::decryptAuthData($oldJwt);
 (new AdminUserController())->update(updateRequest($app, 3, ['password' => 'synthetic-new-password']));
 $results['admin_password_reset_saved'] = password_verify('synthetic-new-password', User::find(3)->password);
 Carbon::setTestNow(Carbon::now()->addSeconds(3601));
-$results['old_token_survives_admin_password_reset_even_after_cache_expiry'] = (bool)AuthService::decryptAuthData($oldJwt);
+$results['old_token_rejected_after_admin_password_reset_and_cache_expiry'] = AuthService::decryptAuthData($oldJwt) === false;
 Carbon::setTestNow();
 
 $user = seed(4);
@@ -121,9 +122,12 @@ $quickCode = $fragmentParams['/login?verify'];
 $app['cache']->put(CacheKey::get('EMAIL_VERIFY_CODE', $user->email), '123456', 300);
 (new AuthController())->forget(AuthForget::create('/', 'POST', ['email' => $user->email, 'email_code' => '123456', 'password' => 'synthetic-reset-password']));
 $results['email_reset_revokes_original_token'] = AuthService::decryptAuthData($oldJwt) === false;
-$newAuthResponse = (new AuthController())->token2Login(Request::create('/', 'GET', ['verify' => $quickCode]));
-$newJwt = json_decode($newAuthResponse->getContent(), true)['data']['auth_data'];
-$results['pre_reset_quick_login_code_creates_new_session_after_password_reset'] = (bool)AuthService::decryptAuthData($newJwt);
+try {
+    (new AuthController())->token2Login(Request::create('/', 'GET', ['verify' => $quickCode]));
+    $results['pre_reset_quick_login_code_is_rejected_after_password_reset'] = false;
+} catch (HttpException $error) {
+    $results['pre_reset_quick_login_code_is_rejected_after_password_reset'] = $error->getStatusCode() === 500;
+}
 
 echo json_encode($results, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL;
 Carbon::setTestNow();

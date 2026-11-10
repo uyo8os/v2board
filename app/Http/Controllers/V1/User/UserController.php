@@ -425,14 +425,14 @@ class UserController extends Controller
 
     public function getQuickLoginUrl(Request $request)
     {
-        $user = User::find($request->user['id']);
+        $user = User::useWritePdo()->find($request->user['id']);
         if (!$user) {
             abort(500, __('The user does not exist'));
         }
 
-        $code = Helper::guid();
-        $key = CacheKey::get('TEMP_TOKEN', $code);
-        Cache::put($key, $user->id, 60);
+        $authorization = $request->input('auth_data') ?? $request->header('authorization');
+        if (!is_string($authorization) || $authorization === '') abort(403, '未登录或登陆已过期');
+        $code = (new AuthService($user))->generateQuickLoginCode($authorization);
         $redirect = '/#/login?verify=' . $code . '&redirect=' . ($request->input('redirect') ? $request->input('redirect') : 'dashboard');
         if (config('v2board.app_url')) {
             $url = config('v2board.app_url') . $redirect;

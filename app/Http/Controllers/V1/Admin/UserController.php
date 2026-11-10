@@ -159,6 +159,7 @@ class UserController extends Controller
         if (isset($params['password'])) {
             $params['password'] = password_hash($params['password'], PASSWORD_DEFAULT);
             $params['password_algo'] = NULL;
+            $params['password_salt'] = NULL;
         } else {
             unset($params['password']);
         }
@@ -339,7 +340,8 @@ class UserController extends Controller
                 $authService->removeAllSession();
             });
             $builder->update([
-                'banned' => 1
+                'banned' => 1,
+                'auth_version' => bin2hex(random_bytes(16)),
             ]);
         } catch (\Exception $e) {
             abort(500, '处理失败');
