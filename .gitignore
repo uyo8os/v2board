@@ -30,5 +30,8 @@ workerman.log
 /frontend/theme/
 # V2Board 节点服务端
 /services/v2node/
+# V2Node 内核依赖
+/services/Xray-core/
+/services/REALITY/
 # API 加密代理服务
 /services/api-proxy/GeneralEncryptionMiddleware/
