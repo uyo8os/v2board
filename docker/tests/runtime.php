@@ -114,9 +114,10 @@ verify(!DB::table('v2_insider_guard_subscribe_audit')->where('id', '>', $auditSt
 verify(DB::table('failed_jobs')->count() === 0, 'No queue jobs failed');
 
 $lastLogId = (int) DB::table('v2_log')->max('id');
-Illuminate\Support\Facades\Log::error('acceptance-mysql-secret', ['password' => 'acceptance-context-secret']);
+Illuminate\Support\Facades\Log::error('Acceptance application error', ['attempt' => 2, 'password' => 'acceptance-context-secret']);
 $logRow = DB::table('v2_log')->where('id', '>', $lastLogId)->where('level', 'ERROR')->first();
 verify($logRow !== null, 'Monolog 3 writes application errors to the original MySQL log');
 $logJson = json_encode($logRow);
-verify(!str_contains($logJson, 'acceptance-mysql-secret') && !str_contains($logJson, 'acceptance-context-secret'), 'MySQL application log omits arbitrary messages and sensitive context');
+verify($logRow->title === 'Acceptance application error' && (json_decode($logRow->context, true)['attempt'] ?? null) === 2
+    && !str_contains($logJson, 'acceptance-context-secret'), 'MySQL retains application diagnostics and omits sensitive context');
 echo "ALL RUNTIME ACCEPTANCE CHECKS PASSED\n";

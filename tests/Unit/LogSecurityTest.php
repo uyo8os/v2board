@@ -3,11 +3,15 @@
 namespace Tests\Unit;
 
 use App\Http\Middleware\RequestLog;
+use GuzzleHttp\Exception\RequestException as GuzzleRequestException;
+use GuzzleHttp\Psr7\Request as PsrRequest;
+use GuzzleHttp\Psr7\Response as PsrResponse;
 use Illuminate\Config\Repository as Config;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Log\ContextLogProcessor;
 use Illuminate\Database\Capsule\Manager;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\QueryException;
 use Illuminate\Events\Dispatcher;
 use Illuminate\Foundation\Application;
 use Illuminate\Http\Request;
@@ -15,6 +19,7 @@ use Illuminate\Http\Response;
 use Illuminate\Routing\Route;
 use Illuminate\Support\Facades\Facade;
 use PDO;
+use PDOException;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
@@ -111,60 +116,128 @@ class LogSecurityTest extends TestCase
         ]);
     }
 
-    public function testDatabaseAndConfiguredFileChannelsOmitContextAndExceptionSecrets(): void
+    public function testDatabaseAndConfiguredFileChannelsKeepRedactedDiagnostics(): void
     {
         $this->app->instance('request', Request::create('https://audit.example.test/action?jwt=sentinel-request-jwt'));
-        $exception = new RuntimeException('sentinel-exception-password');
+        $exception = (static function (string $localPassword): RuntimeException {
+            return new RuntimeException(
+                'Cache connection timed out; password=sentinel-exception-password',
+                42,
+                new RuntimeException('Connection reset by peer')
+            );
+        })('sentinel-stack-argument');
         $context = [
-            'config' => ['payment' => ['secret' => 'sentinel-nested-key']],
+            'job' => [
+                'attempt' => 2,
+                'secret' => 'sentinel-nested-key',
+                'endpoint' => '/internal/health?session=sentinel-context-query',
+            ],
+            'request_data' => ['value' => 'sentinel-raw-payload'],
             'token' => 'sentinel-context-token',
             'exception' => $exception,
         ];
         foreach (['mysql', 'single', 'daily', 'stack'] as $channel) {
-            $this->app['log']->channel($channel)->error('sentinel-message-secret', $context);
+            $this->app['log']->channel($channel)->error('Retry failed. Authorization: Bearer sentinel-message-secret', $context);
         }
         $row = $this->database->getConnection()->table('v2_log')->where('level', 'ERROR')->first();
         $this->assertNotNull($row);
-        $this->assertStringContainsString(RuntimeException::class, $row->context, 'Exception type remains useful for diagnosis');
+        $this->assertStringStartsWith('Retry failed.', $row->title);
+        $storedContext = json_decode($row->context, true, 512, JSON_THROW_ON_ERROR);
+        $this->assertSame(2, $storedContext['job']['attempt']);
+        $this->assertSame(RuntimeException::class, $storedContext['exception_type']);
+        $this->assertSame('42', $storedContext['exception_code']);
+        $this->assertStringStartsWith('Cache connection timed out;', $storedContext['exception_message']);
+        $this->assertNotEmpty($storedContext['exception_trace']);
+        $this->assertSame('Connection reset by peer', $storedContext['exception_previous']['message']);
         $files = glob($this->logDirectory . '/*');
         $this->assertNotEmpty($files, 'Configured file channels must actually write');
-        $output = json_encode($row);
-        $fileOutput = '';
-        foreach ($files as $file) $fileOutput .= file_get_contents($file);
-        $this->assertSame(3, substr_count($fileOutput, RuntimeException::class), 'single, daily and stack each retain exception type');
-        $output .= $fileOutput;
-        $this->assertSecretsAbsent($output, ['sentinel-message-secret', 'sentinel-exception-password', 'sentinel-nested-key', 'sentinel-context-token', 'sentinel-request-jwt']);
+        $fileOutput = implode('', array_map('file_get_contents', $files));
+        $this->assertSame(3, substr_count($fileOutput, 'Cache connection timed out;'), 'single, daily and stack each retain the error reason');
+        $this->assertSecretsAbsent(json_encode($row) . $fileOutput, [
+            'sentinel-message-secret', 'sentinel-exception-password', 'sentinel-stack-argument',
+            'sentinel-nested-key', 'sentinel-context-token', 'sentinel-context-query', 'sentinel-request-jwt', 'sentinel-raw-payload',
+        ]);
+    }
+
+    public function testQueryExceptionKeepsErrorCodesWithoutSqlOrBindings(): void
+    {
+        $this->app->instance('request', Request::create('/'));
+        $driverError = new PDOException("Duplicate entry 'sentinel-driver-value'");
+        $driverError->errorInfo = ['23000', 1062, $driverError->getMessage()];
+        $exception = new QueryException('mysql', 'insert into accounts (password) values (?)', ['sentinel-sql-binding'], $driverError);
+
+        $this->app->make(\Illuminate\Contracts\Debug\ExceptionHandler::class)->report($exception);
+
+        $row = $this->database->getConnection()->table('v2_log')->where('level', 'ERROR')->first();
+        $this->assertNotNull($row);
+        $this->assertStringContainsString('SQLSTATE 23000', $row->title);
+        $this->assertStringContainsString('driver code 1062', $row->context);
+        $this->assertSecretsAbsent(json_encode($row), ['sentinel-driver-value', 'sentinel-sql-binding', 'insert into accounts']);
+    }
+
+    public function testHttpExceptionKeepsStatusWithoutRequestUrlOrResponseBody(): void
+    {
+        $this->app->instance('request', Request::create('/'));
+        $request = new PsrRequest('POST', 'https://example.test/path?token=sentinel-upstream-url');
+        $response = new PsrResponse(502, [], 'sentinel-upstream-body');
+        $exceptions = [
+            new \Illuminate\Http\Client\RequestException(new \Illuminate\Http\Client\Response($response)),
+            GuzzleRequestException::create($request, $response),
+            GuzzleRequestException::create($request),
+        ];
+
+        $handler = $this->app->make(\Illuminate\Contracts\Debug\ExceptionHandler::class);
+        foreach ($exceptions as $exception) {
+            $handler->report($exception);
+        }
+
+        $rows = $this->database->getConnection()->table('v2_log')->where('level', 'ERROR')->orderBy('id')->get();
+        $this->assertSame([
+            'HTTP request failed (status 502)',
+            'HTTP request failed (status 502)',
+            'Error completing request',
+        ], $rows->pluck('title')->all());
+        foreach ($rows as $row) {
+            $this->assertSecretsAbsent(json_encode($row), ['sentinel-upstream-body', 'sentinel-upstream-url']);
+        }
     }
 
     public function testDatabaseWriteFailureDoesNotLeakTheExceptionToDailyLog(): void
     {
         $this->app->instance('request', Request::create('/?token=sentinel-fallback-token'));
         $this->database->getConnection()->statement('DROP TABLE v2_log');
-        $this->app['log']->error('sentinel-fallback-message', ['password' => 'sentinel-fallback-password']);
+        $this->app['log']->error('Report export failed', ['password' => 'sentinel-fallback-password']);
         $files = glob($this->logDirectory . '/*');
         $this->assertNotEmpty($files, 'Failure should produce an isolated file fallback');
         $output = implode('', array_map('file_get_contents', $files));
-        $this->assertSecretsAbsent($output, ['sentinel-fallback-token', 'sentinel-fallback-message', 'sentinel-fallback-password']);
+        $this->assertStringContainsString('System log database write failed', $output);
+        $this->assertStringContainsString('Report export failed', $output);
+        $this->assertStringContainsString('Database operation failed', $output);
+        $this->assertSecretsAbsent($output, ['sentinel-fallback-token', 'sentinel-fallback-password']);
     }
 
     public function testLaravelExceptionReportingProtectsDatabaseAndFileLogs(): void
     {
         $this->app->instance('request', Request::create('/admin/path-secret?jwt=sentinel-reported-jwt'));
         $handler = $this->app->make(\Illuminate\Contracts\Debug\ExceptionHandler::class);
-        $handler->report(new LogReportTestException('sentinel-reported-message'));
+        $message = 'Unable to restore the job; token=sentinel-reported-message';
+        $handler->report(new LogReportTestException($message));
         $row = $this->database->getConnection()->table('v2_log')->where('level', 'ERROR')->first();
         $this->assertNotNull($row, 'Laravel exception handler must actually write to the default database logger');
         $context = json_decode($row->context, true, 512, JSON_THROW_ON_ERROR);
         $this->assertSame(LogReportTestException::class, $context['exception_type']);
+        $this->assertStringStartsWith('Unable to restore the job;', $row->title);
+        $this->assertStringStartsWith('Unable to restore the job;', $context['exception_message']);
         $secrets = ['sentinel-reported-message', 'sentinel-reported-context', 'sentinel-reported-jwt'];
         $this->assertSecretsAbsent(json_encode($row), $secrets);
 
         $this->app['config']->set('logging.default', 'single');
-        $handler->report(new LogReportTestException('sentinel-reported-message'));
+        $handler->report(new LogReportTestException($message));
         $path = $this->logDirectory . '/single.log';
         $this->assertFileExists($path, 'Laravel exception handler must actually write to the configured file logger');
         $output = file_get_contents($path);
         $this->assertStringContainsString('LogReportTestException', $output);
+        $this->assertStringContainsString('Unable to restore the job;', $output);
         $this->assertSecretsAbsent($output, $secrets);
     }
 
@@ -173,10 +246,13 @@ class LogSecurityTest extends TestCase
         $this->app->instance('request', Request::create('/'));
         $this->app['config']->set('logging.channels.broken', ['driver' => 'nonexistent']);
         $logger = $this->app['log']->channel('broken');
-        $logger->error('sentinel-emergency-message', ['exception' => new RuntimeException('sentinel-emergency-exception')]);
+        $logger->error('Queue dispatch failed. token=sentinel-emergency-message', [
+            'exception' => new RuntimeException('Cache unavailable. password: sentinel-emergency-exception'),
+        ]);
         foreach ($logger->getHandlers() as $handler) $handler->close();
         $output = file_get_contents($this->logDirectory . '/emergency.log');
-        $this->assertNotSame('', $output);
+        $this->assertStringContainsString('Queue dispatch failed.', $output);
+        $this->assertStringContainsString('Cache unavailable.', $output);
         $this->assertSecretsAbsent($output, ['sentinel-emergency-message', 'sentinel-emergency-exception']);
     }
 

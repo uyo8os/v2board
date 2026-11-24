@@ -64,7 +64,7 @@ class ConsumptionRestrictionOrderTest extends TestCase
             ['plan_id' => 1, 'period' => 'onetime_price'],
         ] as $request) {
             $this->postJson($this->routes['save'], $request)->assertStatus(422)
-                ->assertJsonPath('message', '当前账号已限制消费');
+                ->assertJsonPath('message', '暂时无法处理');
         }
         DB::table('v2_user')->where('id', 2)->update(['plan_id' => null]);
         $this->postJson($this->routes['save'], ['plan_id' => 1, 'period' => 'month_price'])->assertStatus(422);

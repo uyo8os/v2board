@@ -54,20 +54,24 @@ $context = json_decode($row->context, true, 512, JSON_THROW_ON_ERROR);
 checkLogSecurity(($context['actor_id'] ?? null) === 7 && ($context['target_id'] ?? null) === 42, 'MySQL retains actor and target IDs');
 checkLogSecurity(noLogSecrets(json_encode($row, JSON_THROW_ON_ERROR), $secrets), 'MySQL request row excludes all credential sentinels');
 
-$error = new RuntimeException('a11-exception-secret');
-Log::error('a11-context-secret', ['exception' => $error, 'nested' => ['password' => 'a11-mail-password']]);
+$error = new RuntimeException('Cache connection timed out; password=a11-exception-secret');
+$details = ['exception' => $error, 'attempt' => 2, 'nested' => ['password' => 'a11-mail-password', 'token' => 'a11-context-secret']];
+Log::error('Queue dispatch failed', $details);
 $row = $db->table('v2_log')->where('level', 'ERROR')->orderByDesc('id')->first();
 checkLogSecurity($row !== null, 'Exception context produces a real MySQL error record');
 $context = json_decode($row->context, true, 512, JSON_THROW_ON_ERROR);
-checkLogSecurity(($context['exception_type'] ?? null) === RuntimeException::class && !empty($context['exception_file']) && !empty($context['exception_line']), 'MySQL retains safe exception metadata');
+checkLogSecurity($row->title === 'Queue dispatch failed' && ($context['attempt'] ?? null) === 2
+    && ($context['exception_type'] ?? null) === RuntimeException::class
+    && str_starts_with($context['exception_message'] ?? '', 'Cache connection timed out;'), 'MySQL retains redacted diagnostics');
 checkLogSecurity(noLogSecrets(json_encode($row, JSON_THROW_ON_ERROR), $secrets), 'MySQL error row excludes exception and context secrets');
 
 $file = sys_get_temp_dir() . '/v2board-a11-' . bin2hex(random_bytes(8)) . '.log';
 $app['config']->set('logging.channels.single.path', $file);
 try {
-    Log::channel('single')->error('a11-context-secret', ['exception' => $error]);
+    Log::channel('single')->error('Queue dispatch failed', $details);
     $output = file_get_contents($file);
-    checkLogSecurity(is_string($output) && str_contains($output, RuntimeException::class), 'Actual file log retains safe exception type');
+    checkLogSecurity(is_string($output) && str_contains($output, 'Queue dispatch failed')
+        && str_contains($output, 'Cache connection timed out;'), 'Actual file log retains redacted diagnostics');
     checkLogSecurity(noLogSecrets($output, $secrets), 'Actual file log excludes exception and context secrets');
 } finally {
     foreach (Log::channel('single')->getHandlers() as $handler) $handler->close();

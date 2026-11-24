@@ -29,7 +29,7 @@ class MysqlLoggerHandler extends AbstractProcessingHandler
                 'method' => $method,
                 'ip' => request()->getClientIp(),
                 'data' => '{}',
-                'context' => json_encode($record['context']),
+                'context' => json_encode($record['context'], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR),
                 'created_at' => $record['datetime']->getTimestamp(),
                 'updated_at' => $record['datetime']->getTimestamp(),
             ];
@@ -38,7 +38,11 @@ class MysqlLoggerHandler extends AbstractProcessingHandler
                 $log
             );
         }catch (\Throwable $e){
-            Log::channel('daily')->error('System log database write failed');
+            Log::channel('daily')->error('System log database write failed', [
+                'exception' => $e,
+                'failed_message' => $record['message'],
+                'failed_context' => $record['context'],
+            ]);
         }
     }
 }
