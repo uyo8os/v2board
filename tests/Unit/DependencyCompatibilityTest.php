@@ -2,6 +2,8 @@
 
 namespace Tests\Unit;
 
+use App\Exceptions\TelegramRequestException;
+use App\Jobs\SendTelegramJob;
 use App\Payments\BEasyPaymentUSDT;
 use App\Payments\EPayQrcode;
 use App\Payments\Epusdt;
@@ -147,12 +149,7 @@ class DependencyCompatibilityTest extends TestCase
 
     public function testTelegramStillReceivesDecodedJsonObjectsAndEncodedQueryParameters(): void
     {
-        $telegram = new class(self::$baseUrl) extends TelegramService {
-            public function __construct(string $baseUrl)
-            {
-                $this->api = $baseUrl . '/telegram/';
-            }
-        };
+        $telegram = $this->telegram('/telegram/');
         $this->assertSame(123, $telegram->getMe()->result->id);
         $params = ['chat_id' => -123456, 'text' => "Test & 中文 + /\n", 'parse_mode' => 'markdown'];
         $response = (new ReflectionMethod(TelegramService::class, 'request'))->invoke($telegram, 'sendMessage', $params);
@@ -214,6 +211,25 @@ class DependencyCompatibilityTest extends TestCase
         } finally {
             SodiumCompat::$disableFallbackForUnitTests = $previous;
         }
+    }
+
+    public function testQueuedTelegramRequestReportsCurlTimeout(): void
+    {
+        $job = new SendTelegramJob(123, 'Offline slow request');
+
+        $this->expectException(TelegramRequestException::class);
+        $this->expectExceptionMessage('cURL 28');
+        $job->handle($this->telegram('/telegram-slow/'));
+    }
+
+    private function telegram(string $path): TelegramService
+    {
+        return new class(self::$baseUrl . $path) extends TelegramService {
+            public function __construct(string $api)
+            {
+                $this->api = $api;
+            }
+        };
     }
 
     private function order(): array

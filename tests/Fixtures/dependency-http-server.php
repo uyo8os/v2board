@@ -19,6 +19,9 @@ if ($path === '/http-error') {
     echo json_encode(['message' => 'Fixture unavailable']);
 } elseif ($path === '/mapi.php') {
     echo json_encode(['code' => 1, 'qrcode' => $captureUrl]);
+} elseif ($path === '/telegram-slow/sendMessage') {
+    sleep(11);
+    echo json_encode(['ok' => true]);
 } elseif (str_starts_with($path, '/telegram/')) {
     echo json_encode(['ok' => true, 'result' => ['id' => 123, 'request' => $request]]);
 } else {

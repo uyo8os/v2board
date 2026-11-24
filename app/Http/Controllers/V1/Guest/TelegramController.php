@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\V1\Guest;
 
+use App\Exceptions\TelegramRequestException;
 use App\Http\Controllers\Controller;
 use App\Services\TelegramService;
 use Illuminate\Http\Request;
@@ -61,6 +62,8 @@ class TelegramController extends Controller
                     return;
                 }
             }
+        } catch (TelegramRequestException $e) {
+            throw $e;
         } catch (\Exception $e) {
             $this->telegramService->sendMessage($msg->chat_id, $e->getMessage());
         }

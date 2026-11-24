@@ -1,10 +1,10 @@
 <?php
 namespace App\Services;
 
+use App\Exceptions\TelegramRequestException;
 use App\Jobs\SendTelegramJob;
 use App\Models\User;
-use \Curl\Curl;
-use Illuminate\Mail\Markdown;
+use Curl\Curl;
 
 class TelegramService {
     protected $api;
@@ -111,14 +111,32 @@ class TelegramService {
     private function request(string $method, array $params = [])
     {
         $curl = new Curl();
-        $curl->get($this->api . $method . '?' . http_build_query($params));
-        $response = $curl->response;
-        $curl->close();
-        if (!isset($response->ok)) abort(500, '请求失败');
-        if (!$response->ok) {
-            abort(500, '来自TG的错误：' . $response->description);
+        try {
+            $curl->setConnectTimeout(3);
+            // Leave time for the worker to release a failed job before its 10-second alarm.
+            $curl->setTimeout(8);
+            $curl->get($this->api . $method . '?' . http_build_query($params));
+
+            if ($curl->curlError) {
+                $code = $curl->curlErrorCode;
+                $reason = curl_strerror($code);
+                throw new TelegramRequestException("Telegram {$method} 请求失败（cURL {$code}，{$reason}）");
+            }
+
+            $response = $curl->response;
+            if (!isset($response->ok)) {
+                throw new TelegramRequestException("Telegram {$method} 响应无效（HTTP {$curl->httpStatusCode}）");
+            }
+            if (!$response->ok) {
+                $description = $response->description ?? null;
+                $reason = is_string($description) ? $description : '请求失败';
+                abort(500, '来自TG的错误：' . $reason);
+            }
+
+            return $response;
+        } finally {
+            $curl->close();
         }
-        return $response;
     }
 
     public function sendMessageWithAdmin($message, $isStaff = false)

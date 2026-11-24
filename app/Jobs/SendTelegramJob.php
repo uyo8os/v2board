@@ -17,6 +17,7 @@ class SendTelegramJob implements ShouldQueue
 
     public $tries = 3;
     public $timeout = 10;
+    public $backoff = [5, 20];
 
     /**
      * Create a new job instance.
@@ -35,9 +36,8 @@ class SendTelegramJob implements ShouldQueue
      *
      * @return void
      */
-    public function handle()
+    public function handle(TelegramService $telegramService): void
     {
-        $telegramService = new TelegramService();
         $telegramService->sendMessage($this->telegramId, $this->text, 'markdown');
     }
 }
