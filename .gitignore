@@ -24,3 +24,9 @@ docker-compose.yml
 public/clients/*
 workerman.webman.php.pid
 workerman.log
+/frontend/admin
+/frontend/theme
+/services/api-proxy
+/services/REALITY
+/services/v2node
+/services/Xray-core
