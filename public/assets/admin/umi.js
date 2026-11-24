@@ -21307,7 +21307,7 @@
                 }
                 ))), o.a.createElement("div", {
                     className: "v2board-copyright"
-                }, window.settings.title ? window.settings.title : "V2Board", " v1.7.5.20261104"))
+                }, window.settings.title ? window.settings.title : "V2Board", " v1.7.5.20261124"))
             }
         }
         var u = Object(l["c"])(e=>{
