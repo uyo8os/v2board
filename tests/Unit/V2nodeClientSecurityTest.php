@@ -62,7 +62,7 @@ class V2nodeClientSecurityTest extends TestCase
         foreach (['shadowsocks', 'vmess', 'trojan', 'tuic', 'hysteria', 'vless', 'anytls', 'v2node'] as $type) {
             if ($type !== 'v2node') $db->statement('CREATE TABLE v2_server_' . $type . ' (id INTEGER PRIMARY KEY, sort INTEGER)');
         }
-        $db->statement('CREATE TABLE v2_server_v2node (id INTEGER PRIMARY KEY, name TEXT, host TEXT, port TEXT, sort INTEGER, show INTEGER, parent_id INTEGER, group_id TEXT, tls_settings TEXT, encryption_settings TEXT, protocol TEXT, tls INTEGER, encryption TEXT, flow TEXT, network TEXT, network_settings TEXT, route_id TEXT, created_at INTEGER, updated_at INTEGER)');
+        $db->statement('CREATE TABLE v2_server_v2node (id INTEGER PRIMARY KEY, name TEXT, host TEXT, port TEXT, sort INTEGER, show INTEGER, parent_id INTEGER, group_id TEXT, tls_settings TEXT, encryption_settings TEXT, protocol TEXT, tls INTEGER, encryption TEXT, flow TEXT, network TEXT, network_settings TEXT, trusted_x_forwarded_for TEXT, route_id TEXT, created_at INTEGER, updated_at INTEGER)');
         // Minimal real tables used by subscription eligibility and delivery recording.
         $db->statement("CREATE TABLE v2_insider_guard_restrict (user_id INTEGER PRIMARY KEY, mode TEXT NOT NULL DEFAULT 'decoy')");
         $db->statement('CREATE TABLE v2_insider_guard_node_exclusion (user_id INTEGER, node_type TEXT, node_id INTEGER, PRIMARY KEY(user_id,node_type,node_id))');
@@ -155,9 +155,19 @@ class V2nodeClientSecurityTest extends TestCase
         $this->assertSame(1, $this->database->getConnection()->table('v2_insider_guard_node_user')->count());
     }
 
-    public function testSingboxSubscriptionRetainsClientTlsFieldsWithoutSecrets(): void
+    public static function subscriptionTlsModes(): array
     {
-        $this->seedNode();
+        return [
+            'REALITY' => [2, 'remote', false],
+            'remote TLS' => [1, 'remote', true],
+            'local TLS' => [1, 'self', false],
+        ];
+    }
+
+    #[DataProvider('subscriptionTlsModes')]
+    public function testSingboxSubscriptionRetainsClientTlsFieldsWithoutSecrets(int $tls, string $certMode, bool $insecure): void
+    {
+        $this->seedNode(['tls' => $tls, 'tls_settings' => json_encode(array_replace($this->tls(), ['cert_mode' => $certMode]))]);
         // Use a tiny controlled template rather than a site's custom subscription configuration.
         $root = sys_get_temp_dir() . '/v2node-client-test-' . bin2hex(random_bytes(8));
         mkdir($root . '/resources/rules', 0777, true);
@@ -172,7 +182,10 @@ class V2nodeClientSecurityTest extends TestCase
             $node = $data['outbounds'][0];
             $this->assertSame('vless', $node['type']);
             $this->assertSame('node.example.test', $node['tls']['server_name']);
-            $this->assertSame('OFFLINE-REALITY-PUBLIC', $node['tls']['reality']['public_key']);
+            $this->assertSame($insecure, $node['tls']['insecure']);
+            if ($tls === 2) {
+                $this->assertSame('OFFLINE-REALITY-PUBLIC', $node['tls']['reality']['public_key']);
+            }
             $this->assertSame(['OFFLINE-ECH-PUBLIC'], $node['tls']['ech']['config']);
             $this->assertSecretsAbsent($response->getContent());
         } finally {
@@ -193,12 +206,14 @@ class V2nodeClientSecurityTest extends TestCase
         $this->assertEquals($before, $db->table('v2_server_v2node')->where('id', 1)->first());
         $admin = (new ServerService())->getAllV2node()[0];
         $this->assertSame($this->tls(), $admin['tls_settings']);
+        $this->assertSame(['192.0.2.10'], $admin['trusted_x_forwarded_for']);
         $this->assertSame('OFFLINE-ENCRYPTION-PRIVATE', $admin['encryption_settings']['private_key']);
         $request = Request::create('/api/v2/server/config', 'GET', ['token' => 'offline-node-token', 'node_id' => 1]);
         $response = (new NodeController($request))->config($request);
         $this->assertSame(200, $response->getStatusCode());
         $node = json_decode($response->getContent(), true);
         $this->assertSame($this->tls(), $node['tls_settings']);
+        $this->assertSame(['192.0.2.10'], $node['trusted_x_forwarded_for']);
         $this->assertSame('OFFLINE-ENCRYPTION-PRIVATE', $node['encryption_settings']['private_key']);
     }
 
@@ -265,6 +280,7 @@ class V2nodeClientSecurityTest extends TestCase
             'id' => 1, 'name' => 'Offline node', 'host' => 'node.example.test', 'port' => '443',
             'sort' => 1, 'show' => 1, 'parent_id' => 0, 'group_id' => '[1]', 'protocol' => 'vless',
             'tls' => 2, 'encryption' => '', 'flow' => '', 'network' => 'tcp', 'network_settings' => '{}',
+            'trusted_x_forwarded_for' => '["192.0.2.10"]',
             'tls_settings' => json_encode($this->tls()),
             'encryption_settings' => '{"private_key":"OFFLINE-ENCRYPTION-PRIVATE","password":"OFFLINE-ENCRYPTION-PUBLIC"}',
             'created_at' => 1000, 'updated_at' => 1000,
@@ -277,7 +293,7 @@ class V2nodeClientSecurityTest extends TestCase
             'server_name' => 'node.example.test', 'allow_insecure' => 0, 'fingerprint' => 'chrome',
             'public_key' => 'OFFLINE-REALITY-PUBLIC', 'short_id' => '0123456789abcdef',
             'ech' => 'custom', 'ech_server_name' => null, 'ech_config' => ['OFFLINE-ECH-PUBLIC'],
-            'pinned_peer_cert_sha256' => str_repeat('a', 64), 'tls_cert' => 'OFFLINE-PUBLIC-CERTIFICATE',
+            'pinned_peer_cert_sha256' => str_repeat('a', 64),
             'alpn' => ['h2', 'http/1.1'], 'serverName' => 'legacy.example.test', 'allowInsecure' => false,
             'cert_mode' => 'remote', 'custom_client_option' => 'OFFLINE-CUSTOM-OPTION',
         ];
@@ -287,6 +303,7 @@ class V2nodeClientSecurityTest extends TestCase
     {
         return array_merge($this->clientTls(), [
             'private_key' => 'OFFLINE-REALITY-PRIVATE', 'ech_key' => 'OFFLINE-ECH-PRIVATE',
+            'tls_cert' => 'OFFLINE-PUBLIC-CERTIFICATE',
             'tls_key' => "-----BEGIN PRIVATE KEY-----\nOFFLINE-TLS-PRIVATE\n-----END PRIVATE KEY-----",
             'dns_env' => ['CF_DNS_API_TOKEN' => 'OFFLINE-DNS-CREDENTIAL'], 'provider' => 'OFFLINE-DNS-PROVIDER',
             'cert_file' => '/offline/certificate.pem', 'key_file' => '/offline/private.key',
@@ -295,7 +312,7 @@ class V2nodeClientSecurityTest extends TestCase
 
     private function assertSecretsAbsent(string $content): void
     {
-        foreach (['OFFLINE-REALITY-PRIVATE', 'OFFLINE-ECH-PRIVATE', 'OFFLINE-TLS-PRIVATE', 'OFFLINE-ENCRYPTION-PRIVATE', 'OFFLINE-DNS-CREDENTIAL', 'OFFLINE-DNS-PROVIDER', '/offline/', 'private_key', 'ech_key', 'tls_key', 'dns_env', 'provider', 'cert_file', 'key_file'] as $secret) {
+        foreach (['OFFLINE-REALITY-PRIVATE', 'OFFLINE-ECH-PRIVATE', 'OFFLINE-TLS-PRIVATE', 'OFFLINE-ENCRYPTION-PRIVATE', 'OFFLINE-DNS-CREDENTIAL', 'OFFLINE-DNS-PROVIDER', 'OFFLINE-PUBLIC-CERTIFICATE', '/offline/', 'private_key', 'ech_key', 'tls_key', 'tls_cert', 'dns_env', 'provider', 'cert_file', 'key_file', 'trusted_x_forwarded_for'] as $secret) {
             $this->assertStringNotContainsString($secret, $content);
         }
     }

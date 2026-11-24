@@ -4,6 +4,8 @@
 
 **更新范围：** 安全审计 A03、用户节点列表、订阅的节点配置输入，以及对应隔离回归测试。
 
+2026-11-24 合入上游更新后，用户节点接口也滤除了证书文本和可信转发地址配置，并继续提供证书指纹。管理端与已认证节点继续取得证书材料和可信转发地址配置。
+
 ## 问题与修复
 
 V2node 的 `remote` 证书模式会把证书私钥存入 `tls_settings.tls_key`。原先用户输出只删除 `private_key`、`ech_key`，所属节点组的普通有效用户可通过 `/api/v1/user/server/fetch` 取得 `tls_key`，以及已配置的 `dns_env` 等服务端字段。问题与 [V3Board 的修复提交](https://github.com/codeman857/v3board/commit/3d47607c9b8e10b74b8a437ccbca8c6bcafdda2d)相同。
